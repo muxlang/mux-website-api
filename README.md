@@ -58,6 +58,7 @@ never tries to build the runtime from source.
 
 - [mux-compiler](https://github.com/muxlang/mux-compiler) - the compiler whose release this serves
 - [mux-website](https://github.com/muxlang/mux-website) - the docs site + playground UI
+- [context](https://github.com/muxlang/context) - cross-repo architecture, design notes, glossary, releases
 
 ## License
 

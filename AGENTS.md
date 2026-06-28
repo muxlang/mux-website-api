@@ -4,6 +4,9 @@ A small Flask service that compiles and runs Mux programs for the playground at
 mux-lang.dev. Part of the multi-repo [muxlang](https://github.com/muxlang)
 ecosystem. Deployed to Fly.io as `mux-lang-api`.
 
+> Cross-repo architecture, design rationale, the feature map, and the release
+> process live in [muxlang/context](https://github.com/muxlang/context).
+
 ## Critical Rules
 
 - **No special characters** - avoid em-dashes, emojis, or other non-ASCII in code,
