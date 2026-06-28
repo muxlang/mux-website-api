@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -r requirements.txt
+      - run: pip install --only-binary :all: --require-hashes -r requirements.lock
       - run: python -m py_compile server.py
       - run: python -c "import flask, flask_cors, flask_limiter, gunicorn"
 
