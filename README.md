@@ -1,0 +1,61 @@
+# mux-website-api
+
+The compile/run API behind the [Mux playground](https://mux-lang.dev). A small
+Flask service that runs submitted Mux programs with the released `mux` binary and
+returns their output.
+
+Hosted on [Fly.io](https://fly.io) as `mux-lang-api` (`mux-lang-api.fly.dev`),
+consumed by [mux-website](https://github.com/muxlang/mux-website) over HTTP.
+
+## How it works
+
+- `POST /api/compile` with `{ "code": "<mux source>" }` -> `{ "output": "..." }`
+- `GET /health` for health checks
+- The service shells out to `mux run` (rate-limited, time-limited) and returns
+  stdout/stderr.
+
+## Pinned compiler version
+
+The `Dockerfile` installs a **released** `mux` binary (no Rust/LLVM build),
+pinned via `ARG MUX_VERSION`. The playground therefore runs a known, deliberately
+chosen compiler release. To upgrade the playground:
+
+1. Ensure the target version is released in
+   [mux-compiler](https://github.com/muxlang/mux-compiler) (the
+   `mux-linux-x86_64.tar.gz` asset must exist).
+2. Bump `MUX_VERSION` in the `Dockerfile`.
+3. Deploy (below).
+
+## Local development
+
+```bash
+pip install -r requirements.txt
+# Needs a `mux` binary on PATH (see the mux-compiler install instructions).
+MUX_BIN=mux gunicorn --bind 0.0.0.0:8080 server:app
+```
+
+Or build/run the production image (matches Fly):
+
+```bash
+docker build -t mux-website-api .
+docker run --rm -p 8080:8080 mux-website-api
+```
+
+## Deployment
+
+```bash
+fly deploy
+```
+
+The slim image bundles clang-22 + the LLVM runtime libraries (the compiler shells
+out to clang and links LLVM at compile time) and sets `MUX_RUNTIME_LIB` so it
+never tries to build the runtime from source.
+
+## Related repositories
+
+- [mux-compiler](https://github.com/muxlang/mux-compiler) - the compiler whose release this serves
+- [mux-website](https://github.com/muxlang/mux-website) - the docs site + playground UI
+
+## License
+
+[MIT](LICENSE)

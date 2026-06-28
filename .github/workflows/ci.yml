@@ -1,0 +1,36 @@
+name: Build
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  api_checks:
+    name: API Checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python -m py_compile server.py
+      - run: python -c "import flask, flask_cors, flask_limiter, gunicorn"
+
+  sonarqube:
+    name: SonarQube
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Disable shallow clone for better analysis relevancy
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
