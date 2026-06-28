@@ -5,3 +5,8 @@ venv/
 .env
 *.log
 .scannerwork/
+
+# Test/coverage artifacts
+.coverage
+coverage.xml
+.pytest_cache/

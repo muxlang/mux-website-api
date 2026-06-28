@@ -1,5 +1,8 @@
 # mux-website-api
 
+[![Sonar Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=muxlang_mux-website-api&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=muxlang_mux-website-api)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=muxlang_mux-website-api&metric=coverage)](https://sonarcloud.io/summary/new_code?id=muxlang_mux-website-api)
+
 The compile/run API behind the [Mux playground](https://mux-lang.dev). A small
 Flask service that runs submitted Mux programs with the released `mux` binary and
 returns their output.
