@@ -5,7 +5,7 @@ mux-lang.dev. Part of the multi-repo [muxlang](https://github.com/muxlang)
 ecosystem. Deployed to Fly.io as `mux-lang-api`.
 
 > Cross-repo architecture, design rationale, the feature map, and the release
-> process live in [muxlang/context](https://github.com/muxlang/context).
+> process live in [muxlang/mux-context](https://github.com/muxlang/mux-context).
 
 ## Critical Rules
 
