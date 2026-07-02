@@ -31,6 +31,8 @@ jobs:
   canary:
     name: API vs compiler main
     runs-on: ubuntu-latest
+    # Bound a hung Cargo build / LLVM install well below GitHub's 6h default.
+    timeout-minutes: 60
     # This is an informational signal; a red canary must not read as "the API is
     # broken". It flags that compiler main and this API have drifted.
     env:
@@ -45,17 +47,17 @@ jobs:
       MUX_RUNTIME_SRC: ${{ github.workspace }}/mux-runtime
     steps:
       - name: Checkout mux-website-api (this repo)
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Checkout mux-compiler main
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           repository: muxlang/mux-compiler
           ref: main
           path: mux-compiler
 
       - name: Checkout mux-runtime main
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           repository: muxlang/mux-runtime
           ref: main
@@ -78,7 +80,7 @@ jobs:
           sudo apt-get install -y llvm-22-dev clang-22 libpolly-22-dev
 
       - name: Cache Cargo registry and build
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry
@@ -93,20 +95,17 @@ jobs:
         run: cargo build --release -p mux-lang
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
 
       - name: Install API dependencies
+        # Only the hash-pinned runtime deps are needed: canary_smoke.py drives
+        # the Flask app via its test client and imports nothing dev-only (no
+        # pytest), so we keep the repo's require-hashes rule intact and skip the
+        # unpinned dev dependencies entirely.
         run: |
           pip install --only-binary :all: --require-hashes -r requirements.lock
-          pip install -r requirements-dev.txt
-
-      - name: Sanity-check the existing test suite
-        # These use stand-in binaries and do not touch a real compiler; running
-        # them confirms the server module still imports and its contract helpers
-        # behave on this Python before the real-binary smoke test.
-        run: python -m pytest -q
 
       - name: Warm up the runtime build
         # The first `mux run` builds mux-runtime from source into a cache, which
