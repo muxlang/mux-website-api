@@ -29,6 +29,19 @@ chosen compiler release. To upgrade the playground:
 2. Bump `MUX_VERSION` in the `Dockerfile`.
 3. Deploy (below).
 
+## Compiler-main canary (non-gating)
+
+The release pin above is intentional: the playground must run a stable released
+compiler, not arbitrary `main`. To catch a compiler-`main` regression that would
+break this API's contract before the next release bump, a scheduled
+`.github/workflows/canary-compiler-main.yml` job builds `mux` from
+[mux-compiler](https://github.com/muxlang/mux-compiler) `main` and runs a smoke
+test (`tests/canary_smoke.py`) against it.
+
+It runs only on a nightly schedule and manual dispatch (never on push or pull
+request), so it does not gate normal CI or deploys and is not a required check.
+It never changes the `MUX_VERSION` pin.
+
 ## Local development
 
 ```bash
