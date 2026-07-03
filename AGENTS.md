@@ -13,6 +13,10 @@ ecosystem. Deployed to Fly.io as `mux-lang-api`.
   comments, or commit messages.
 - **No Rust/LLVM toolchain here** - this repo installs the RELEASED `mux` binary;
   it never builds the compiler. Keep it that way (the whole point of the split).
+  The one exception is `.github/workflows/canary-compiler-main.yml`, a scheduled,
+  NON-GATING canary that builds compiler `main` in CI only (never in the
+  production image) to catch contract drift early. It does not touch the release
+  pin and must never become a required check.
 - **Understand existing code first** - read `server.py` and the `Dockerfile`
   before changing anything.
 - **Security matters** - this runs untrusted user code. Preserve the sandboxing,
