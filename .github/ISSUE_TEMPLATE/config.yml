@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://mux-lang.dev
+    about: Read the Mux language docs before filing an issue.
+  - name: Report a security vulnerability
+    url: https://github.com/muxlang/mux-website-api/security/advisories/new
+    about: Report sandbox or security issues privately via GitHub Security Advisories.
