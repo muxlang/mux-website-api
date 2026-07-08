@@ -29,3 +29,5 @@ body:
     id: environment
     attributes:
       label: Environment
+      value: |
+        - Deployed API version or MUX_VERSION pin (if known):
