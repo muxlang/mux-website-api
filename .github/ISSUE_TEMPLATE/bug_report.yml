@@ -1,0 +1,33 @@
+name: Bug report
+description: Report incorrect compile/run behavior from the playground API
+labels: ["needs triage"]
+assignees: ["DerekCorniello"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1. Mux source (minimal):
+        2. Request or endpoint:
+        3. Response or error:
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      value: |
+        - Deployed API version or MUX_VERSION pin (if known):
