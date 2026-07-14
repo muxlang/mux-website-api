@@ -3,16 +3,19 @@
 # project's Python env (with requirements-dev.txt) is active/installed; it does
 # not install anything. Reports every failure in one pass.
 
-STAGED_FILES=$(git diff --cached --name-only)
-
 HAS_PY=false
-for file in $STAGED_FILES; do
+# Read staged paths line by line (IFS= read) so a path containing spaces is not
+# word-split and mis-skipped. A here-doc (not a pipe) keeps the loop in this
+# shell so HAS_PY persists.
+while IFS= read -r file; do
   case "$file" in
     *.py|requirements*.txt|requirements.lock|.github/workflows/ci.yml)
       HAS_PY=true
       ;;
   esac
-done
+done <<EOF
+$(git diff --cached --name-only)
+EOF
 
 if [ "$HAS_PY" = false ]; then
   echo "No Python files changed, skipping checks."
