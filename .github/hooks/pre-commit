@@ -1,0 +1,52 @@
+#!/bin/sh
+# Mirrors mux-website-api CI (.github/workflows/ci.yml) API Checks. Assumes the
+# project's Python env (with requirements-dev.txt) is active/installed; it does
+# not install anything. Reports every failure in one pass.
+
+STAGED_FILES=$(git diff --cached --name-only)
+
+HAS_PY=false
+for file in $STAGED_FILES; do
+  case "$file" in
+    *.py|requirements*.txt|requirements.lock|.github/workflows/ci.yml)
+      HAS_PY=true
+      ;;
+  esac
+done
+
+if [ "$HAS_PY" = false ]; then
+  echo "No Python files changed, skipping checks."
+  exit 0
+fi
+
+FAILED=0
+
+echo "Byte-compiling server.py..."
+if ! python3 -m py_compile server.py; then
+  echo ""
+  echo "py_compile failed. Fix the syntax error before committing."
+  FAILED=1
+fi
+echo "py_compile OK"
+
+echo ""
+echo "Checking core imports resolve..."
+if ! python3 -c "import flask, flask_cors, flask_limiter, gunicorn"; then
+  echo ""
+  echo "Import smoke check failed. Is the dev environment installed/activated?"
+  FAILED=1
+fi
+echo "Imports OK"
+
+echo ""
+echo "Running tests..."
+if ! python3 -m pytest -q; then
+  echo ""
+  echo "Tests failed. Fix failing tests before committing."
+  FAILED=1
+fi
+echo "Tests OK"
+
+if [ "$FAILED" -ne 0 ]; then
+  exit 1
+fi
