@@ -29,12 +29,13 @@ published; its version is tracked by git tag, and `ARG MUX_VERSION` in the
 - **CI/config**: Quoted the pip run step so the workflow YAML is valid; corrected
   service configuration (#3); addressed SonarCloud findings.
 
-<!-- ===========================================================
-     Independent multi-repo versioning begins at 0.5.0.
-     Entries below are inherited from the pre-split (monorepo-era)
-     compiler changelog and are shared history, not specific to
-     mux-website-api.
-     =========================================================== -->
+---
+
+> **Independent multi-repo versioning begins at 0.5.0.** Entries below are inherited
+> from the pre-split (monorepo-era) compiler changelog and are shared history, not
+> specific to `mux-website-api`.
+
+---
 
 ## [0.4.1] - 2026-06-27
 
