@@ -1,21 +1,20 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Mirrors mux-website-api CI (.github/workflows/ci.yml) API Checks. Assumes the
 # project's Python env (with requirements-dev.txt) is active/installed; it does
 # not install anything. Reports every failure in one pass.
 
 HAS_PY=false
-# Read staged paths line by line (IFS= read) so a path containing spaces is not
-# word-split and mis-skipped. A here-doc (not a pipe) keeps the loop in this
-# shell so HAS_PY persists.
-while IFS= read -r file; do
+# Read staged paths NUL-delimited (-z) so paths with spaces, tabs, quotes,
+# backslashes, newlines, or non-ASCII bytes are matched literally instead of
+# word-split or read in Git's quoted/escaped form. Process substitution keeps
+# the loop in this shell so HAS_PY persists.
+while IFS= read -r -d '' file; do
   case "$file" in
     *.py|requirements*.txt|requirements.lock|.github/workflows/ci.yml)
       HAS_PY=true
       ;;
   esac
-done <<EOF
-$(git diff --cached --name-only)
-EOF
+done < <(git diff --cached --name-only -z)
 
 if [ "$HAS_PY" = false ]; then
   echo "No Python files changed, skipping checks."
@@ -29,8 +28,9 @@ if ! python3 -m py_compile server.py; then
   echo ""
   echo "py_compile failed. Fix the syntax error before committing."
   FAILED=1
+else
+  echo "py_compile OK"
 fi
-echo "py_compile OK"
 
 echo ""
 echo "Checking core imports resolve..."
@@ -38,8 +38,9 @@ if ! python3 -c "import flask, flask_cors, flask_limiter, gunicorn"; then
   echo ""
   echo "Import smoke check failed. Is the dev environment installed/activated?"
   FAILED=1
+else
+  echo "Imports OK"
 fi
-echo "Imports OK"
 
 echo ""
 echo "Running tests..."
@@ -47,8 +48,9 @@ if ! python3 -m pytest -q; then
   echo ""
   echo "Tests failed. Fix failing tests before committing."
   FAILED=1
+else
+  echo "Tests OK"
 fi
-echo "Tests OK"
 
 if [ "$FAILED" -ne 0 ]; then
   exit 1
