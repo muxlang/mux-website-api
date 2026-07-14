@@ -7,7 +7,7 @@
 FROM ubuntu:24.04
 
 # The Mux compiler release the playground runs. Bump deliberately to upgrade.
-ARG MUX_VERSION=0.4.1
+ARG MUX_VERSION=0.5.0
 
 # `mux run` shells out to clang and the mux binary dynamically links LLVM, so the
 # slim image still needs clang-22 + the LLVM runtime libraries. Python runs the API.
