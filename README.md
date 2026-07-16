@@ -1,14 +1,24 @@
+<div align="center">
+
+<img src="https://mux-lang.dev/img/mux-logo.png" alt="Mux Logo" width="120">
+
 # mux-website-api
 
+**The compile/run API behind the [Mux](https://github.com/muxlang) playground**
+
+[![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
+[![Playground](https://img.shields.io/badge/playground-mux--lang.dev-blue.svg?style=flat-square)](https://mux-lang.dev)
 [![Sonar Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=muxlang_mux-website-api&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=muxlang_mux-website-api)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=muxlang_mux-website-api&metric=coverage)](https://sonarcloud.io/summary/new_code?id=muxlang_mux-website-api)
 
-The compile/run API behind the [Mux playground](https://mux-lang.dev). A small
-Flask service that runs submitted Mux programs with the released `mux` binary and
-returns their output.
+</div>
 
-Hosted on [Fly.io](https://fly.io) as `mux-lang-api` (`mux-lang-api.fly.dev`),
-consumed by [mux-website](https://github.com/muxlang/mux-website) over HTTP.
+A small Flask service that runs submitted Mux programs with the released `mux`
+binary and returns their output. Hosted on [Fly.io](https://fly.io) as
+`mux-lang-api` (`mux-lang-api.fly.dev`), consumed by
+[mux-website](https://github.com/muxlang/mux-website) over HTTP.
+
+---
 
 ## How it works
 
@@ -16,6 +26,8 @@ consumed by [mux-website](https://github.com/muxlang/mux-website) over HTTP.
 - `GET /health` for health checks
 - The service shells out to `mux run` (rate-limited, time-limited) and returns
   stdout/stderr.
+
+---
 
 ## Pinned compiler version
 
@@ -29,7 +41,7 @@ chosen compiler release. To upgrade the playground:
 2. Bump `MUX_VERSION` in the `Dockerfile`.
 3. Deploy (below).
 
-## Compiler-main canary (non-gating)
+### Compiler-main canary (non-gating)
 
 The release pin above is intentional: the playground must run a stable released
 compiler, not arbitrary `main`. To catch a compiler-`main` regression that would
@@ -41,6 +53,8 @@ test (`tests/canary_smoke.py`) against it.
 It runs only on a nightly schedule and manual dispatch (never on push or pull
 request), so it does not gate normal CI or deploys and is not a required check.
 It never changes the `MUX_VERSION` pin.
+
+---
 
 ## Local development
 
@@ -57,6 +71,8 @@ docker build -t mux-website-api .
 docker run --rm -p 8080:8080 mux-website-api
 ```
 
+---
+
 ## Deployment
 
 ```bash
@@ -67,12 +83,21 @@ The slim image bundles clang-22 + the LLVM runtime libraries (the compiler shell
 out to clang and links LLVM at compile time) and sets `MUX_RUNTIME_LIB` so it
 never tries to build the runtime from source.
 
+---
+
 ## Related repositories
 
-- [mux-compiler](https://github.com/muxlang/mux-compiler) - the compiler whose release this serves
-- [mux-website](https://github.com/muxlang/mux-website) - the docs site + playground UI
-- [mux-context](https://github.com/muxlang/mux-context) - cross-repo architecture, design notes, glossary, releases
+| Repo | What it is |
+|------|------------|
+| [mux-compiler](https://github.com/muxlang/mux-compiler) | The language and compiler whose release this serves |
+| [mux-runtime](https://github.com/muxlang/mux-runtime) | Runtime + standard library linked by compiled programs |
+| [mux-website](https://github.com/muxlang/mux-website) | Docs site (mux-lang.dev) and playground UI |
+| [tree-sitter-mux](https://github.com/muxlang/tree-sitter-mux) | Tree-sitter grammar + highlight queries |
+| [mux-syntax-highlighting](https://github.com/muxlang/mux-syntax-highlighting) | TextMate grammar, VSCode extension, canonical syntax spec |
+| [mux-context](https://github.com/muxlang/mux-context) | Cross-repo architecture, design rationale, glossary, releases |
+
+---
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) - Maintained by [Derek Corniello](https://github.com/DerekCorniello)
