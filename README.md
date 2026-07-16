@@ -41,7 +41,9 @@ chosen compiler release. To upgrade the playground:
 2. Bump `MUX_VERSION` in the `Dockerfile`.
 3. Deploy (below).
 
-### Compiler-main canary (non-gating)
+---
+
+## Compiler-main canary (non-gating)
 
 The release pin above is intentional: the playground must run a stable released
 compiler, not arbitrary `main`. To catch a compiler-`main` regression that would
