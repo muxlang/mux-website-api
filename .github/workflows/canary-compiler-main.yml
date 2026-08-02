@@ -70,14 +70,10 @@ jobs:
           toolchain: 1.93.1
 
       - name: Install LLVM 22 + clang
-        run: |
-          set -eux
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ca-certificates gnupg lsb-release wget
-          sudo wget --max-redirect=0 -O /usr/share/keyrings/llvm-snapshot.gpg.key https://apt.llvm.org/llvm-snapshot.gpg.key
-          echo "deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg.key] https://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
-          sudo apt-get update
-          sudo apt-get install -y llvm-22-dev clang-22 libpolly-22-dev
+        # Delegates to the checked-out mux-compiler's own script rather than
+        # keeping a second copy of the apt.llvm.org install logic here - one
+        # place to get the lsb_release-derived repo line right, not two.
+        run: ./mux-compiler/scripts/ci/install-llvm.sh
 
       - name: Cache Cargo registry and build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
