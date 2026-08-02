@@ -15,6 +15,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint_workflows:
+    # actionlint plus its built-in shellcheck integration (active once
+    # shellcheck is on PATH, which it is on this image) - context #29's
+    # lint-the-pipeline-itself ask. Ungated: a workflow-only change is exactly
+    # what this exists to catch, and it is cheap enough not to need a filter.
+    name: Lint Workflows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: actionlint + shellcheck
+        run: ./scripts/ci/lint-workflows.sh
+
   api_checks:
     name: API Checks
     runs-on: ubuntu-latest
@@ -76,7 +91,7 @@ jobs:
           # confused with "measure omitted from the response". Retry to ride out
           # indexing lag; no readable .total after retries fails closed.
           count=""
-          for attempt in 1 2 3 4 5; do
+          for _ in 1 2 3 4 5; do
             resp=$(curl -sf -u "$SONAR_TOKEN:" "$api") || { sleep 5; continue; }
             count=$(printf '%s' "$resp" | jq -r '.total // empty')
             [ -n "$count" ] && break
