@@ -47,17 +47,17 @@ jobs:
       MUX_RUNTIME_SRC: ${{ github.workspace }}/mux-runtime
     steps:
       - name: Checkout mux-website-api (this repo)
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Checkout mux-compiler main
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: muxlang/mux-compiler
           ref: main
           path: mux-compiler
 
       - name: Checkout mux-runtime main
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: muxlang/mux-runtime
           ref: main
@@ -65,7 +65,7 @@ jobs:
 
       # Toolchain pinned to match mux-compiler build.yml.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9
+        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9 # untagged master commit; the repo's only tag (v1) is OLDER than this
         with:
           toolchain: 1.93.1
 
@@ -80,7 +80,7 @@ jobs:
           sudo apt-get install -y llvm-22-dev clang-22 libpolly-22-dev
 
       - name: Cache Cargo registry and build
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
@@ -102,7 +102,7 @@ jobs:
           cargo build --release -p mux-lang
 
       - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
 
