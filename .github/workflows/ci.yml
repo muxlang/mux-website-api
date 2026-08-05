@@ -40,6 +40,14 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
+          # Both files, because this job installs from both: a change to either
+          # must miss the cache. cache-dependency-path drives the key, so
+          # listing only the lock would serve stale dev wheels after a
+          # requirements-dev.txt bump.
+          cache: pip
+          cache-dependency-path: |
+            requirements.lock
+            requirements-dev.txt
       - run: "pip install --only-binary :all: --require-hashes -r requirements.lock"
       - run: python -m py_compile server.py
       - run: python -c "import flask, flask_cors, flask_limiter, gunicorn"
