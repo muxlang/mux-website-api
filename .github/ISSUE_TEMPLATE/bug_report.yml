@@ -1,6 +1,7 @@
 name: Bug report
 description: Report incorrect compile/run behavior from the playground API
 labels: ["needs triage"]
+type: Bug
 assignees: ["DerekCorniello"]
 body:
   - type: textarea
