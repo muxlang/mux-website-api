@@ -84,6 +84,11 @@ jobs:
             // this must not cause. Leaving the label on someone who could have
             // triaged it costs a maintainer one click; the reverse loses the
             // issue.
+            //
+            // This same implementation passed review in mux-compiler#412,
+            // mux-runtime#63, tree-sitter-mux#28, and
+            // mux-syntax-highlighting#26; the shared rationale lives in
+            // muxlang/mux-context#19.
             const association = context.payload.issue.author_association;
             const isInsider = ['OWNER', 'MEMBER'].includes(association);
 
