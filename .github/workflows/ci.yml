@@ -88,7 +88,6 @@ jobs:
         run: >-
           docker save --output /tmp/mux-website-api-ci.tar mux-website-api:ci &&
           docker run --rm
-          --network none
           -v /tmp/mux-website-api-ci.tar:/image.tar:ro
           aquasec/trivy@sha256:d77b8f01e4f75e0ad86617e92618210c12013d89a4c905216fbebd3c0ef90273 image
           --input /image.tar
