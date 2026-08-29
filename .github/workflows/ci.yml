@@ -70,6 +70,30 @@ jobs:
           path: coverage.xml
           if-no-files-found: error
 
+  production_image:
+    name: Production image build and scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build production image
+        run: docker build --pull --tag mux-website-api:ci .
+      - name: Smoke-test production image
+        run: >-
+          docker run --rm --network none --entrypoint python3 mux-website-api:ci
+          -c "import flask, flask_cors, flask_limiter, gunicorn"
+      - name: Scan production image
+        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
+        with:
+          image-ref: mux-website-api:ci
+          format: table
+          exit-code: '1'
+          ignore-unfixed: false
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
   sonarqube:
     name: SonarQube
     needs: api_checks
