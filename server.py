@@ -222,6 +222,39 @@ def _format_result(stdout, stderr, returncode, timed_out, output_too_large):
     return jsonify({"output": stdout}), 200
 
 
+def _wait_for_compiler(proc, output_limit_exceeded):
+    timed_out = False
+    deadline = time.monotonic() + COMPILE_TIMEOUT
+    while proc.poll() is None:
+        if output_limit_exceeded.is_set():
+            _stop_process(proc)
+            break
+        if time.monotonic() >= deadline:
+            timed_out = True
+            _stop_process(proc)
+            break
+        time.sleep(READ_POLL_INTERVAL)
+    _stop_process(proc)
+    return timed_out
+
+
+def _finish_readers(proc, readers):
+    # Let readers consume buffered bytes through EOF before closing their
+    # streams. If a platform reports EOF late, close the pipes to unblock the
+    # final join and prevent a reader from outliving this request.
+    for reader in readers:
+        reader.join(timeout=1)
+    if not any(reader.is_alive() for reader in readers):
+        return
+    for stream in (proc.stdout, proc.stderr):
+        if stream is not None:
+            stream.close()
+    for reader in readers:
+        reader.join(timeout=1)
+        if reader.is_alive():
+            logger.error("Compiler output reader did not stop for pid=%s", proc.pid)
+
+
 def _validate_compile_request(data):
     if not isinstance(data, dict):
         return None, (jsonify({"error": "Request body must be a JSON object"}), 400)
@@ -280,41 +313,8 @@ def _execute_compiler(code):
         t.start()
         readers.append(t)
 
-    timed_out = False
-    deadline = time.monotonic() + COMPILE_TIMEOUT
-
-    while proc.poll() is None:
-        if output_limit_exceeded.is_set():
-            _stop_process(proc)
-            break
-        if time.monotonic() >= deadline:
-            timed_out = True
-            _stop_process(proc)
-            break
-        time.sleep(READ_POLL_INTERVAL)
-
-    if proc.poll() is None:
-        _stop_process(proc)
-    else:
-        # The direct compiler process can exit while a descendant still owns
-        # the pipes. The process group remains the ownership boundary for
-        # cleanup in that case.
-        _stop_process(proc)
-        proc.wait()
-
-    # Let readers consume buffered bytes through EOF before closing their
-    # streams. If a platform reports EOF late, close the pipes to unblock the
-    # final join and prevent a reader from outliving this request.
-    for reader in readers:
-        reader.join(timeout=1)
-    if any(reader.is_alive() for reader in readers):
-        for stream in (proc.stdout, proc.stderr):
-            if stream is not None:
-                stream.close()
-        for reader in readers:
-            reader.join(timeout=1)
-            if reader.is_alive():
-                logger.error("Compiler output reader did not stop for pid=%s", proc.pid)
+    timed_out = _wait_for_compiler(proc, output_limit_exceeded)
+    _finish_readers(proc, readers)
 
     output_too_large = output_limit_exceeded.is_set()
     stdout = _clean_output(b"".join(stdout_chunks).decode("utf-8", errors="replace"))
