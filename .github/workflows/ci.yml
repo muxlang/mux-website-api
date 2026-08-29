@@ -81,9 +81,13 @@ jobs:
       - name: Build production image
         run: docker build --pull --tag mux-website-api:ci .
       - name: Smoke-test production image
-        run: >-
-          docker run --rm --network none --entrypoint python3 mux-website-api:ci
-          -c "import flask, flask_cors, flask_limiter, gunicorn"
+        run: |
+          docker run --rm --network none --entrypoint sh \
+            -e RATE_LIMIT_STORAGE_URI=redis://smoke-test mux-website-api:ci -eu -c '
+              python3 -c "import flask, flask_cors, flask_limiter, gunicorn"
+              printf "func main() returns void {\\n    return\\n}\\n" > /tmp/smoke.mux
+              mux run /tmp/smoke.mux
+            '
       - name: Scan production image
         run: >-
           docker save --output /tmp/mux-website-api-ci.tar mux-website-api:ci &&
