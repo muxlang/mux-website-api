@@ -1,18 +1,18 @@
-import os
-import uuid
-import shutil
 import logging
-import threading
+import os
+import shutil
+import signal
 import subprocess
 import tempfile
+import threading
 import time
-import signal
+import uuid
 from pathlib import Path
 
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_cors import CORS
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -210,8 +210,8 @@ def _execute_compiler(code):
     output_limit_exceeded = threading.Event()
     total_output_bytes = [0]
     total_output_lock = threading.Lock()
-    stdout_chunks = []
-    stderr_chunks = []
+    stdout_chunks: list[bytes] = []
+    stderr_chunks: list[bytes] = []
     readers = []
 
     for stream, chunks in [(proc.stdout, stdout_chunks), (proc.stderr, stderr_chunks)]:
