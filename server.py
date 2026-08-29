@@ -14,16 +14,21 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_cors import CORS
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger("mux-api")
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 512 * 1024
 
-CORS(app, origins=[
-    "https://mux-lang.dev",
-    "http://localhost:3000",
-])
+CORS(
+    app,
+    origins=[
+        "https://mux-lang.dev",
+        "http://localhost:3000",
+    ],
+)
 
 limiter = Limiter(
     app=app,
@@ -79,23 +84,29 @@ def _read_stream(
     stream,
     chunks,
     limit,
-    stop_event,
     limit_exceeded_event,
     total_bytes,
     total_lock,
 ):
+    """Read a compiler pipe to EOF while retaining at most ``limit`` bytes.
+
+    Readers must continue draining after the limit is reached. Otherwise a
+    compiler that writes to both pipes can block on the pipe we stopped
+    reading, preventing the supervisor from completing process shutdown.
+    """
     try:
-        for chunk in iter(lambda: stream.read(4096), ""):
-            if stop_event.is_set():
-                break
-            chunk_size = len(chunk.encode("utf-8", errors="replace"))
+        for chunk in iter(lambda: stream.read(4096), b""):
+            chunk_size = len(chunk)
             with total_lock:
+                available = max(limit - total_bytes[0], 0)
+                if available:
+                    chunks.append(chunk[:available])
                 total_bytes[0] += chunk_size
                 if total_bytes[0] > limit:
                     limit_exceeded_event.set()
-                    break
-            chunks.append(chunk)
-    except ValueError:
+    except (OSError, ValueError):
+        # The supervisor closes pipes after killing the process. A concurrent
+        # close can surface as either exception and is part of normal teardown.
         pass
     finally:
         try:
@@ -117,6 +128,21 @@ def _kill_process_group(proc: subprocess.Popen) -> None:
         logger.exception("Failed to kill process group for pid=%s", proc.pid)
 
 
+def _stop_process(proc: subprocess.Popen) -> None:
+    """Terminate a process group and wait for the direct child to reap."""
+    _kill_process_group(proc)
+    if proc.poll() is not None:
+        return
+    try:
+        proc.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        # A process that ignores SIGKILL is not expected on Linux, but retrying
+        # the group kill keeps this boundary safe if the first signal races a
+        # process-group transition.
+        _kill_process_group(proc)
+        proc.wait(timeout=1)
+
+
 @app.errorhandler(413)
 def request_too_large(_err):
     return jsonify({"error": "Request body exceeds 512KB limit"}), 413
@@ -136,7 +162,9 @@ def _format_result(stdout, stderr, returncode, timed_out, output_too_large):
     if timed_out:
         return jsonify({"error": f"Execution timed out after {COMPILE_TIMEOUT}s"}), 504
     if output_too_large:
-        return jsonify({"error": f"Program output exceeds {MAX_OUTPUT_SIZE // 1024}KB limit"}), 413
+        return jsonify(
+            {"error": f"Program output exceeds {MAX_OUTPUT_SIZE // 1024}KB limit"}
+        ), 413
     if returncode != 0:
         msg = stderr if stderr else f"Process exited with code {returncode}"
         return jsonify({"error": msg}), 200
@@ -156,7 +184,10 @@ def _validate_compile_request(data):
 
     code_size = len(raw_code.encode("utf-8", errors="replace"))
     if code_size > MAX_CODE_SIZE:
-        return None, (jsonify({"error": f"Source code exceeds {MAX_CODE_SIZE // 1024}KB limit"}), 413)
+        return None, (
+            jsonify({"error": f"Source code exceeds {MAX_CODE_SIZE // 1024}KB limit"}),
+            413,
+        )
 
     return raw_code, None
 
@@ -164,64 +195,81 @@ def _validate_compile_request(data):
 def _execute_compiler(code):
     tmp_dir = tempfile.mkdtemp(prefix="mux_")
     src_file = os.path.join(tmp_dir, f"input_{uuid.uuid4().hex}.mux")
-    with open(src_file, "w") as f:
+    with open(src_file, "w", encoding="utf-8") as f:
         f.write(code)
 
     proc = subprocess.Popen(
         [MUX_BIN, "run", src_file],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
+        text=False,
         cwd=tmp_dir,
         start_new_session=True,
     )
 
-    stop_event = threading.Event()
     output_limit_exceeded = threading.Event()
     total_output_bytes = [0]
     total_output_lock = threading.Lock()
-    stdout_lines = []
-    stderr_lines = []
+    stdout_chunks = []
+    stderr_chunks = []
+    readers = []
 
-    for stream, lines in [(proc.stdout, stdout_lines), (proc.stderr, stderr_lines)]:
+    for stream, chunks in [(proc.stdout, stdout_chunks), (proc.stderr, stderr_chunks)]:
         t = threading.Thread(
             target=_read_stream,
-            args=(stream, lines, MAX_OUTPUT_SIZE, stop_event,
-                  output_limit_exceeded, total_output_bytes, total_output_lock),
-            daemon=True,
+            args=(
+                stream,
+                chunks,
+                MAX_OUTPUT_SIZE,
+                output_limit_exceeded,
+                total_output_bytes,
+                total_output_lock,
+            ),
         )
         t.start()
+        readers.append(t)
 
     timed_out = False
-    output_too_large = False
     deadline = time.monotonic() + COMPILE_TIMEOUT
 
     while proc.poll() is None:
         if output_limit_exceeded.is_set():
-            output_too_large = True
-            _kill_process_group(proc)
+            _stop_process(proc)
             break
         if time.monotonic() >= deadline:
             timed_out = True
-            _kill_process_group(proc)
+            _stop_process(proc)
             break
         time.sleep(READ_POLL_INTERVAL)
 
-    try:
-        proc.wait(timeout=1)
-    except subprocess.TimeoutExpired:
-        _kill_process_group(proc)
+    if proc.poll() is None:
+        _stop_process(proc)
+    else:
+        # The direct compiler process can exit while a descendant still owns
+        # the pipes. The process group remains the ownership boundary for
+        # cleanup in that case.
+        _stop_process(proc)
         proc.wait()
 
-    stop_event.set()
+    # Let readers consume buffered bytes through EOF before closing their
+    # streams. If a platform reports EOF late, close the pipes to unblock the
+    # final join and prevent a reader from outliving this request.
+    for reader in readers:
+        reader.join(timeout=1)
+    if any(reader.is_alive() for reader in readers):
+        for stream in (proc.stdout, proc.stderr):
+            if stream is not None:
+                stream.close()
+        for reader in readers:
+            reader.join(timeout=1)
+            if reader.is_alive():
+                logger.error("Compiler output reader did not stop for pid=%s", proc.pid)
 
-    stdout = _clean_output("".join(stdout_lines))
-    stderr = _clean_output("".join(stderr_lines)).strip()
-
-    if len(stdout) > MAX_OUTPUT_SIZE:
-        stdout = stdout[:MAX_OUTPUT_SIZE] + "\n... (output truncated)"
+    output_too_large = output_limit_exceeded.is_set()
+    stdout = _clean_output(b"".join(stdout_chunks).decode("utf-8", errors="replace"))
+    stderr = _clean_output(
+        b"".join(stderr_chunks).decode("utf-8", errors="replace")
+    ).strip()
 
     return stdout, stderr, proc.returncode, timed_out, output_too_large, tmp_dir
 
@@ -229,7 +277,9 @@ def _execute_compiler(code):
 def _compile_with_cleanup(code):
     tmp_dir = None
     try:
-        stdout, stderr, returncode, timed_out, output_too_large, tmp_dir = _execute_compiler(code)
+        stdout, stderr, returncode, timed_out, output_too_large, tmp_dir = (
+            _execute_compiler(code)
+        )
         return _format_result(stdout, stderr, returncode, timed_out, output_too_large)
     except FileNotFoundError:
         logger.error("Compiler binary not found at %s", MUX_BIN)
