@@ -4,7 +4,9 @@
 #
 # Base must match (or exceed) the glibc the release binary was built against
 # (ubuntu-24.04 / glibc 2.39); debian:bookworm (2.36) is too old to run it.
-FROM ubuntu:24.04
+# Pin the multi-platform Ubuntu manifest. A floating tag would allow a rebuild
+# of the same API commit to silently change its OS and toolchain inputs.
+FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 
 # The Mux compiler release the playground runs. Bump deliberately to upgrade.
 ARG MUX_VERSION=0.10.1
@@ -20,7 +22,6 @@ RUN set -eux; \
     echo "deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg.key] https://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-22 main" > /etc/apt/sources.list.d/llvm.list; \
     apt-get update; \
     apt-get install -y --no-install-recommends clang-22 llvm-22 python3 python3-pip; \
-    rm -rf /var/lib/apt/lists/*; \
     arch="$(uname -m)"; \
     case "$arch" in \
         x86_64|amd64) target="linux-x86_64" ;; \
@@ -37,7 +38,9 @@ RUN set -eux; \
     install -Dm755 "mux-${target}/bin/mux" /usr/local/bin/mux; \
     mkdir -p /usr/local/lib/mux; \
     cp "mux-${target}/lib/"* /usr/local/lib/mux/; \
-    rm -rf "/tmp/${archive}" "/tmp/${archive}.sha256" "/tmp/mux-${target}"
+    rm -rf "/tmp/${archive}" "/tmp/${archive}.sha256" "/tmp/mux-${target}"; \
+    apt-get purge -y --auto-remove curl gnupg lsb-release wget; \
+    rm -rf /var/lib/apt/lists/*
 
 # Point the compiler at the bundled runtime lib so it never tries to cargo-build
 # the runtime in the slim container.
@@ -65,7 +68,8 @@ RUN echo 'uv==0.6.5' \
             -r /app/requirements.lock
 
 ENV PATH="/opt/venv/bin:$PATH" \
-    PYTHONPATH="/app"
+    PYTHONPATH="/app" \
+    MUX_ENV="production"
 
 # Run as non-root in production.
 RUN useradd --create-home --uid 10001 appuser

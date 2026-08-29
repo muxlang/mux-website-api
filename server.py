@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 import os
 import shutil
@@ -8,6 +9,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -30,11 +32,60 @@ CORS(
     ],
 )
 
+
+def _rate_limit_storage_uri() -> str:
+    """Return the configured shared limiter store, failing closed in Fly.
+
+    An in-process store cannot enforce a limit across Gunicorn workers or Fly
+    Machines. Keeping it as a local-development default is useful, but
+    silently deploying it would make the advertised request budget false.
+    Production therefore requires an explicitly configured shared store.
+    """
+    configured = os.environ.get("RATE_LIMIT_STORAGE_URI")
+    if os.environ.get("MUX_ENV") == "production":
+        if not configured:
+            raise RuntimeError(
+                "RATE_LIMIT_STORAGE_URI must be configured for production; "
+                "use a shared Redis or Valkey URI"
+            )
+        if urlparse(configured).scheme not in {"redis", "rediss"}:
+            raise RuntimeError(
+                "RATE_LIMIT_STORAGE_URI must use redis:// or rediss:// in production"
+            )
+        return configured
+    if configured:
+        return configured
+    return "memory://"
+
+
+def _rate_limit_key() -> str:
+    """Use Fly's edge-authenticated client address when deployed.
+
+    ``X-Forwarded-For`` is client-controlled unless every proxy hop is
+    configured explicitly. Fly Proxy provides ``Fly-Client-IP`` for this
+    deployment, so only a syntactically valid address from that header is
+    trusted in production; local development keeps Flask's peer address.
+    """
+    if os.environ.get("MUX_ENV") == "production":
+        forwarded_address = request.headers.get("Fly-Client-IP", "")
+        try:
+            ipaddress.ip_address(forwarded_address)
+        except ValueError:
+            logger.warning("Invalid Fly-Client-IP header; using peer address")
+        else:
+            return forwarded_address
+    return get_remote_address()
+
+
 limiter = Limiter(
     app=app,
-    key_func=get_remote_address,
+    key_func=_rate_limit_key,
     default_limits=["20 per minute"],
-    storage_uri="memory://",
+    storage_uri=_rate_limit_storage_uri(),
+    # A limiter backend outage must reject requests instead of silently
+    # allowing unlimited compilation work.
+    swallow_errors=False,
+    in_memory_fallback_enabled=False,
 )
 
 MAX_CODE_SIZE = 100 * 1024

@@ -12,6 +12,7 @@ primary_region = 'iad'
 [env]
   COMPILE_TIMEOUT = '30'
   GUNICORN_CMD_ARGS = '--capture-output --log-level info'
+  MUX_ENV = 'production'
   MUX_BIN = 'mux'
 
 [http_service]

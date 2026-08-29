@@ -70,8 +70,16 @@ Or build/run the production image (matches Fly):
 
 ```bash
 docker build -t mux-website-api .
-docker run --rm -p 8080:8080 mux-website-api
+docker run --rm -p 8080:8080 \
+  -e RATE_LIMIT_STORAGE_URI=redis://host.docker.internal:6379/0 \
+  mux-website-api
 ```
+
+The production image fails closed unless `RATE_LIMIT_STORAGE_URI` points at a
+shared Redis or Valkey service. Configure the production credential as a Fly
+secret (`fly secrets set RATE_LIMIT_STORAGE_URI=rediss://...`); never commit it
+to `fly.toml`. A shared store is required because the service runs multiple
+Gunicorn workers and may be scheduled on more than one Machine.
 
 ---
 
