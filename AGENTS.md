@@ -1,65 +1,28 @@
-# mux-website-api: AI Agent Guidelines
+# mux-website-api
 
-A small Flask service that compiles and runs Mux programs for the playground at
-mux-lang.dev. Part of the multi-repo [muxlang](https://github.com/muxlang)
-ecosystem. Deployed to Fly.io as `mux-lang-api`.
+`mux-website-api` is the Flask service behind the Mux playground. It compiles
+and runs untrusted user programs in the production Fly.io service.
 
-> Cross-repo architecture, design rationale, the feature map, and the release
-> process live in [muxlang/mux-context](https://github.com/muxlang/mux-context).
+Cross-repository architecture and release facts live in
+[`mux-context`](https://github.com/muxlang/mux-context). Read its canonical
+[`SKILL.md`](https://github.com/muxlang/mux-context/blob/main/SKILL.md) before
+changing the compiler/runtime contract or deployment behavior.
 
-## Critical Rules
+## Invariants
 
-- **No special characters** - avoid em-dashes, emojis, or other non-ASCII in code,
-  comments, or commit messages.
-- **No Rust/LLVM toolchain here** - this repo installs the RELEASED `mux` binary;
-  it never builds the compiler. Keep it that way (the whole point of the split).
-  The one exception is `.github/workflows/canary-compiler-main.yml`, a scheduled,
-  NON-GATING canary that builds compiler `main` in CI only (never in the
-  production image) to catch contract drift early. It does not touch the release
-  pin and must never become a required check.
-- **Understand existing code first** - read `server.py` and the `Dockerfile`
-  before changing anything.
-- **Security matters** - this runs untrusted user code. Preserve the sandboxing,
-  rate limits (`flask-limiter`), time limits (`COMPILE_TIMEOUT`), payload caps
-  (`MAX_CONTENT_LENGTH`), CORS origins, and the non-root container user.
-- **Hash-pinned deps** - `requirements.lock` is hash-pinned and installed via uv;
-  regenerate it properly rather than hand-editing.
+- Treat every request as hostile: preserve isolation, resource limits, timeout
+  handling, cleanup, and non-root execution.
+- Keep `MAX_CONTENT_LENGTH`, source limits, CORS policy, rate limiting, and the
+  released `MUX_VERSION` contract explicit and tested.
+- Regenerate `requirements.lock` with uv; never hand-edit dependency hashes.
+- Production image changes require a reproducible, pinned, non-live package
+  install and an explicit image/security check.
 
-## Structure
+## Quality gate
 
-- `server.py` - the Flask app (`/api/compile`, `/health`).
-- `requirements.txt` / `requirements.lock` - Python deps (lock is hash-pinned).
-- `Dockerfile` - single-stage image; downloads the released `mux` binary
-  (`ARG MUX_VERSION`), installs clang-22 + LLVM runtime libs + Python, sets
-  `MUX_RUNTIME_LIB`, runs gunicorn.
-- `fly.toml` - Fly.io config (app `mux-lang-api`).
+Run `python -m py_compile server.py`, `pytest`, the configured Ruff checks, and
+`docker build -t mux-website-api .` when the image or process runner changes.
 
-## Upgrading the pinned compiler
+## Documentation
 
-Bump `ARG MUX_VERSION` in the `Dockerfile` to a version that is released in
-mux-compiler (the `mux-linux-x86_64.tar.gz` asset must exist), then `fly deploy`.
-
-## Important Dockerfile facts (learned the hard way)
-
-- The base image glibc must be >= the glibc the release binary was built against
-  (currently `ubuntu:24.04` / glibc 2.39; `debian:bookworm` is too old).
-- The published `mux-*.tar.gz.sha256` references a `dist/` path, so verify by
-  hash directly (`echo "<hash>  <file>" | sha256sum -c -`), not `sha256sum -c file`.
-
-## Development & checks
-
-```bash
-pip install -r requirements.txt
-python -m py_compile server.py            # CI runs this
-docker build -t mux-website-api .         # validate the production image
-docker run --rm -p 8080:8080 mux-website-api
-```
-
-CI runs the Python checks + a SonarQube scan. Deploy with `fly deploy`.
-
-## Related repos
-
-- `mux-compiler` - the compiler/CLI whose release this serves.
-- `mux-website` - the docs site + playground UI that calls this API.
-
-**Add to this document as you learn vital information.**
+See [`README.md`](README.md), [`Dockerfile`](Dockerfile), and [`fly.toml`](fly.toml).
