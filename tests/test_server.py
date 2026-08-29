@@ -6,6 +6,9 @@ run, `/bin/false` for a non-zero exit, a bogus path for the not-found branch), s
 the suite runs anywhere Python does.
 """
 
+import os
+import stat
+
 import pytest
 
 import server
@@ -43,20 +46,71 @@ def test_env_int_non_positive_falls_back(monkeypatch):
     assert server._env_int("SOME_INT", 7) == 7
 
 
+def test_rate_limit_storage_defaults_to_memory_outside_production(monkeypatch):
+    monkeypatch.delenv("RATE_LIMIT_STORAGE_URI", raising=False)
+    monkeypatch.delenv("MUX_ENV", raising=False)
+    assert server._rate_limit_storage_uri() == "memory://"
+
+
+def test_rate_limit_storage_requires_shared_store_in_production(monkeypatch):
+    monkeypatch.delenv("RATE_LIMIT_STORAGE_URI", raising=False)
+    monkeypatch.setenv("MUX_ENV", "production")
+    with pytest.raises(RuntimeError, match="RATE_LIMIT_STORAGE_URI"):
+        server._rate_limit_storage_uri()
+
+
+def test_rate_limit_storage_rejects_process_local_store_in_production(monkeypatch):
+    monkeypatch.setenv("MUX_ENV", "production")
+    monkeypatch.setenv("RATE_LIMIT_STORAGE_URI", "memory://")
+    with pytest.raises(RuntimeError, match="redis://"):
+        server._rate_limit_storage_uri()
+
+
+def test_rate_limit_storage_accepts_shared_store_in_production(monkeypatch):
+    uri = "rediss://:secret@example.test:6380/0"
+    monkeypatch.setenv("MUX_ENV", "production")
+    monkeypatch.setenv("RATE_LIMIT_STORAGE_URI", uri)
+    assert server._rate_limit_storage_uri() == uri
+
+
+def test_rate_limit_key_uses_fly_client_ip_in_production(monkeypatch):
+    monkeypatch.setenv("MUX_ENV", "production")
+    with server.app.test_request_context(
+        "/api/compile", headers={"Fly-Client-IP": "203.0.113.9"}
+    ):
+        assert server._rate_limit_key() == "203.0.113.9"
+
+
+def test_rate_limit_key_rejects_invalid_fly_client_ip(monkeypatch):
+    monkeypatch.setenv("MUX_ENV", "production")
+    with server.app.test_request_context(
+        "/api/compile", headers={"Fly-Client-IP": "not-an-ip"}
+    ):
+        assert server._rate_limit_key() == "127.0.0.1"
+
+
 def test_clean_output_strips_null_bytes():
     assert server._clean_output("a\x00b\x00") == "ab"
 
 
 def test_format_result_branches():
     with server.app.app_context():
-        _, status = server._format_result("", "", 0, timed_out=True, output_too_large=False)
+        _, status = server._format_result(
+            "", "", 0, timed_out=True, output_too_large=False
+        )
         assert status == 504
-        _, status = server._format_result("", "", 0, timed_out=False, output_too_large=True)
+        _, status = server._format_result(
+            "", "", 0, timed_out=False, output_too_large=True
+        )
         assert status == 413
-        body, status = server._format_result("", "boom", 1, timed_out=False, output_too_large=False)
+        body, status = server._format_result(
+            "", "boom", 1, timed_out=False, output_too_large=False
+        )
         assert status == 200
         assert body.get_json()["error"] == "boom"
-        body, status = server._format_result("hi", "", 0, timed_out=False, output_too_large=False)
+        body, status = server._format_result(
+            "hi", "", 0, timed_out=False, output_too_large=False
+        )
         assert status == 200
         assert body.get_json()["output"] == "hi"
 
@@ -110,7 +164,7 @@ def test_request_body_over_max_content_length(client):
 def test_compile_success_path(client, monkeypatch):
     # /bin/echo exits 0 and prints, exercising the success branch.
     monkeypatch.setattr(server, "MUX_BIN", "/bin/echo")
-    resp = client.post("/api/compile", json={"code": "print(\"hi\")"})
+    resp = client.post("/api/compile", json={"code": 'print("hi")'})
     assert resp.status_code == 200
     assert "output" in resp.get_json()
 
@@ -128,3 +182,42 @@ def test_compile_binary_missing(client, monkeypatch):
     resp = client.post("/api/compile", json={"code": "x"})
     assert resp.status_code == 500
     assert resp.get_json()["error"] == "Compiler not found on server"
+
+
+def _fake_mux(tmp_path, source):
+    path = tmp_path / "fake-mux"
+    path.write_text("#!/usr/bin/env python3\n" + source, encoding="utf-8")
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+    return os.fspath(path)
+
+
+def test_compile_rejects_combined_output_limit_after_fast_exit(
+    client, monkeypatch, tmp_path
+):
+    mux = _fake_mux(
+        tmp_path,
+        "import sys\n"
+        "sys.stdout.buffer.write(b'x' * (1024 * 1024 + 1))\n"
+        "sys.stderr.buffer.write(b'y' * (1024 * 1024 + 1))\n"
+        "sys.stdout.flush()\n",
+    )
+    monkeypatch.setattr(server, "MUX_BIN", mux)
+
+    resp = client.post("/api/compile", json={"code": "output"})
+
+    assert resp.status_code == 413
+    assert "output exceeds" in resp.get_json()["error"]
+
+
+def test_compile_timeout_reaps_process_group(client, monkeypatch, tmp_path):
+    mux = _fake_mux(
+        tmp_path,
+        "import time\ntime.sleep(10)\n",
+    )
+    monkeypatch.setattr(server, "MUX_BIN", mux)
+    monkeypatch.setattr(server, "COMPILE_TIMEOUT", 1)
+
+    resp = client.post("/api/compile", json={"code": "sleep"})
+
+    assert resp.status_code == 504
+    assert "timed out" in resp.get_json()["error"]
