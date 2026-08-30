@@ -192,6 +192,18 @@ def test_rate_limit_key_rejects_invalid_fly_client_ip(monkeypatch):
         assert server._rate_limit_key() == "127.0.0.1"
 
 
+def test_rate_limit_returns_429_after_default_limit(monkeypatch):
+    monkeypatch.setattr(server.limiter, "enabled", True)
+    server.limiter.reset()
+    try:
+        with server.app.test_client() as test_client:
+            statuses = [test_client.get("/health").status_code for _ in range(21)]
+        assert statuses[:20] == [200] * 20
+        assert statuses[20] == 429
+    finally:
+        server.limiter.reset()
+
+
 def test_clean_output_strips_null_bytes():
     assert server._clean_output("a\x00b\x00") == "ab"
 
