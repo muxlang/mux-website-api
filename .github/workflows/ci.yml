@@ -80,6 +80,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Build production image
+        run: docker build --pull --platform=linux/amd64 --tag mux-website-api:ci .
+      - name: Build attested image metadata
         run: >-
           docker buildx build
           --pull
@@ -87,8 +89,7 @@ jobs:
           --provenance=true
           --sbom=true
           --metadata-file /tmp/mux-image-metadata.json
-          --tag mux-website-api:ci
-          --load
+          --output=type=oci,dest=/tmp/mux-website-api-attested.tar
           .
       - name: Verify image provenance and SBOM metadata
         run: |
