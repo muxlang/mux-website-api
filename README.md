@@ -22,7 +22,10 @@ binary and returns their output. Hosted on [Fly.io](https://fly.io) as
 
 ## How it works
 
-- `POST /api/compile` with `{ "code": "<mux source>" }` -> `{ "output": "..." }`
+- `POST /api/compile` with `{ "code": "<mux source>" }` -> `{ "output": "..." }`.
+  Browser traffic reaches this endpoint through the Cloudflare Worker. The Fly
+  origin accepts compile requests only when the Worker supplies the private
+  `MUX_API_ORIGIN_TOKEN` header.
 - `GET /health` for health checks
 - The service runs `mux run` inside a disposable bubblewrap namespace on the
   existing Fly machine. The child has no network, a read-only view of the
@@ -74,17 +77,21 @@ Or build/run the production image (matches Fly):
 ```bash
 docker build -t mux-website-api .
 docker run --rm -p 8080:8080 \
-  -e RATE_LIMIT_STORAGE_URI=redis://host.docker.internal:6379/0 \
+  -e MUX_ENV=production \
+  -e MUX_API_ORIGIN_TOKEN="replace-with-a-random-secret" \
   mux-website-api
 ```
 
-The production image fails closed unless `RATE_LIMIT_STORAGE_URI` points at a
-shared Redis or Valkey service. Configure the production credential as a Fly
-secret (`fly secrets set RATE_LIMIT_STORAGE_URI=rediss://...`); never commit it
-to `fly.toml`. A shared store is required because the service runs multiple
-Gunicorn workers and may be scheduled on more than one Machine. The image also
-requires `/usr/bin/bwrap` and `/usr/bin/prlimit`; these are installed in the
-same image and do not require a second Fly application or machine.
+The production image requires `MUX_API_ORIGIN_TOKEN` so the public compile
+endpoint cannot be bypassed by calling the Fly hostname directly. Generate one
+random value and configure it as a Fly secret and a Cloudflare Worker secret;
+never commit it to `fly.toml`. The Worker provides the distributed edge rate
+limit and Cloudflare absorbs volumetric traffic. The API keeps a bounded
+in-process limiter as defense in depth, so no Redis or Valkey service is needed
+for the single-machine deployment. A shared Redis or Valkey URI remains
+supported through `RATE_LIMIT_STORAGE_URI` if one is already available. The
+image also requires `/usr/bin/bwrap` and `/usr/bin/prlimit`; these are installed
+in the same image and do not require a second Fly application or machine.
 
 ---
 
