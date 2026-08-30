@@ -260,6 +260,8 @@ def _compiler_command(src_file: str, tmp_dir: str) -> list[str]:
         "--unshare-uts",
         "--unshare-net",
         "--disable-userns",
+        "--cap-drop",
+        "ALL",
         "--clearenv",
         "--ro-bind",
         "/usr",
