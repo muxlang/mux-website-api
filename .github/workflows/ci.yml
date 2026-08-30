@@ -79,7 +79,22 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build production image
-        run: docker build --pull --platform=linux/amd64 --tag mux-website-api:ci .
+        run: >-
+          docker buildx build
+          --pull
+          --platform=linux/amd64
+          --provenance=true
+          --sbom=true
+          --metadata-file /tmp/mux-image-metadata.json
+          --tag mux-website-api:ci
+          --load
+          .
+      - name: Verify image provenance and SBOM metadata
+        run: |
+          jq -e '
+            has("buildx.build.provenance") and
+            has("buildx.build.sbom")
+          ' /tmp/mux-image-metadata.json
       - name: Smoke-test production image
         run: |
           docker run --rm --network none --entrypoint sh \
