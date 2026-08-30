@@ -62,7 +62,7 @@ jobs:
       - name: Dependency advisory check
         run: pip-audit -r requirements.lock
       - name: Run tests with coverage
-        run: python -m pytest -q --cov=server --cov-report=xml:coverage.xml
+        run: python -m pytest -q --cov=server --cov-branch --cov-report=xml:coverage.xml
       - name: Upload coverage report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -79,7 +79,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build production image
-        run: docker build --pull --tag mux-website-api:ci .
+        run: docker build --pull --platform=linux/amd64 --tag mux-website-api:ci .
       - name: Smoke-test production image
         run: |
           docker run --rm --network none --entrypoint sh \
