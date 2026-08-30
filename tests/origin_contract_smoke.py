@@ -31,7 +31,10 @@ def post_json(url: str) -> tuple[int, dict[str, object]]:
     request = Request(
         url,
         data=json.dumps({"code": CANARY_CODE}).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (compatible; MuxOriginSmoke/1.0)",
+        },
         method="POST",
     )
     try:
