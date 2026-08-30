@@ -104,6 +104,7 @@ def test_production_compiler_command_enforces_resource_and_namespace_controls(
         "--unshare-uts",
         "--unshare-net",
         "--disable-userns",
+        "--cap-drop",
         "--clearenv",
         "--proc",
         "--dev",
@@ -111,6 +112,8 @@ def test_production_compiler_command_enforces_resource_and_namespace_controls(
         "--chdir",
     ):
         assert option in command
+    cap_drop = command.index("--cap-drop")
+    assert command[cap_drop : cap_drop + 2] == ["--cap-drop", "ALL"]
 
 
 def test_production_compiler_command_fails_closed_when_runner_missing(
