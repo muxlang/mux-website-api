@@ -10,6 +10,10 @@ FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a
 
 # The Mux compiler release the playground runs. Bump deliberately to upgrade.
 ARG MUX_VERSION=0.10.1
+# Keep the isolation boundary packages explicit. These are amd64 versions from
+# Ubuntu Noble security; update them deliberately with the base-image refresh.
+ARG BUBBLEWRAP_VERSION=0.9.0-1ubuntu0.1
+ARG UTIL_LINUX_VERSION=2.39.3-9ubuntu6.5
 
 # `mux run` shells out to clang and the mux binary dynamically links LLVM, so the
 # slim image still needs clang-22 + the LLVM runtime libraries. Python runs the API.
@@ -17,7 +21,9 @@ ARG MUX_VERSION=0.10.1
 # binary. The published .sha256 references a "dist/" path, so verify by hash.
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-release wget; \
+    apt-get install -y --no-install-recommends \
+        "bubblewrap=${BUBBLEWRAP_VERSION}" ca-certificates curl gnupg lsb-release \
+        "util-linux=${UTIL_LINUX_VERSION}" wget; \
     wget --max-redirect=0 -O /usr/share/keyrings/llvm-snapshot.gpg.key https://apt.llvm.org/llvm-snapshot.gpg.key; \
     echo '8b2a587ffd672c4687e7581dad4b2f6c1bb2ad6b480cd9771ba2ff48e0b8c75d  /usr/share/keyrings/llvm-snapshot.gpg.key' | sha256sum -c -; \
     echo "deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg.key] https://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-22 main" > /etc/apt/sources.list.d/llvm.list; \

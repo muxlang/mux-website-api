@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Compiler process cleanup**: Drain compiler output to EOF, enforce the combined
   byte limit even when a process exits quickly, and reap all reader threads during
   timeout or output-limit teardown.
+- **Compiler isolation**: Run production submissions inside a bubblewrap
+  namespace with no network, an allowlisted environment, an isolated workspace,
+  and bounded CPU, memory, process, file, and output resources. Fail closed when
+  the sandbox runner is unavailable.
 
 ## [0.5.0] - 2026-07-13
 

@@ -14,6 +14,8 @@ primary_region = 'iad'
   GUNICORN_CMD_ARGS = '--capture-output --log-level info'
   MUX_ENV = 'production'
   MUX_BIN = 'mux'
+  MUX_SANDBOX_BIN = '/usr/bin/bwrap'
+  MUX_PRLIMIT_BIN = '/usr/bin/prlimit'
 
 [http_service]
   internal_port = 8080
