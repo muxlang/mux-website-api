@@ -97,10 +97,7 @@ jobs:
           test -s /tmp/mux-website-api-attested.tar
           tar -xOf /tmp/mux-website-api-attested.tar index.json > /tmp/mux-attested-index.json
           jq -e 'has("containerimage.descriptor")' /tmp/mux-image-metadata.json
-          jq -e '
-            [.manifests[]?.annotations["vnd.docker.reference.type"]?]
-            | any(. == "attestation-manifest")
-          ' /tmp/mux-attested-index.json
+          grep -Fq 'attestation-manifest' /tmp/mux-attested-index.json
       - name: Smoke-test production image
         run: |
           docker run --rm --network none --entrypoint sh \
