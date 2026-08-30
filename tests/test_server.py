@@ -350,6 +350,104 @@ def test_cleanup_workspace_repairs_untrusted_permissions(tmp_path):
     assert not workspace.exists()
 
 
+def test_cleanup_workspace_skips_symlink_targets(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    target = tmp_path / "outside"
+    target.write_text("must survive", encoding="utf-8")
+    (workspace / "link").symlink_to(target)
+
+    assert server._cleanup_workspace(os.fspath(workspace))
+    assert not workspace.exists()
+    assert target.read_text(encoding="utf-8") == "must survive"
+
+
+def test_cleanup_workspace_accepts_already_removed_path(tmp_path):
+    assert server._cleanup_workspace(os.fspath(tmp_path / "missing"))
+
+
+def test_cleanup_workspace_fails_when_root_cannot_be_made_writable(
+    monkeypatch, tmp_path
+):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    def fail_chmod(_path, _mode):
+        raise OSError("chmod failed")
+
+    monkeypatch.setattr(server.os, "chmod", fail_chmod)
+
+    assert not server._cleanup_workspace(os.fspath(workspace))
+    workspace.rmdir()
+
+
+def test_cleanup_workspace_fails_when_walk_reports_error(monkeypatch, tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    def failing_walk(_path, *, topdown, onerror, followlinks):
+        onerror(OSError("walk failed"))
+        return iter(())
+
+    monkeypatch.setattr(server.os, "walk", failing_walk)
+
+    assert not server._cleanup_workspace(os.fspath(workspace))
+    workspace.rmdir()
+
+
+def test_cleanup_workspace_fails_when_nested_chmod_fails(monkeypatch, tmp_path):
+    workspace = tmp_path / "workspace"
+    nested = workspace / "nested"
+    nested.mkdir(parents=True)
+    real_chmod = server.os.chmod
+
+    def fail_nested_chmod(path, mode):
+        if path == os.fspath(nested):
+            raise OSError("nested chmod failed")
+        real_chmod(path, mode)
+
+    monkeypatch.setattr(server.os, "chmod", fail_nested_chmod)
+
+    assert not server._cleanup_workspace(os.fspath(workspace))
+    nested.rmdir()
+    workspace.rmdir()
+
+
+def test_cleanup_workspace_treats_rmtree_race_as_success(monkeypatch, tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    def disappeared(_path):
+        raise FileNotFoundError
+
+    monkeypatch.setattr(server.shutil, "rmtree", disappeared)
+
+    assert server._cleanup_workspace(os.fspath(workspace))
+    workspace.rmdir()
+
+
+def test_cleanup_workspace_fails_when_rmtree_raises(monkeypatch, tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    def failed(_path):
+        raise OSError("rmtree failed")
+
+    monkeypatch.setattr(server.shutil, "rmtree", failed)
+
+    assert not server._cleanup_workspace(os.fspath(workspace))
+    workspace.rmdir()
+
+
+def test_cleanup_workspace_fails_when_rmtree_leaves_path(monkeypatch, tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setattr(server.shutil, "rmtree", lambda _path: None)
+
+    assert not server._cleanup_workspace(os.fspath(workspace))
+    workspace.rmdir()
+
+
 def test_compile_startup_failure_still_cleans_workspace(client, monkeypatch, tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
