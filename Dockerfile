@@ -28,7 +28,7 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends \
         "bubblewrap=${BUBBLEWRAP_VERSION}" ca-certificates curl gnupg lsb-release \
         "util-linux=${UTIL_LINUX_VERSION}" wget; \
-    wget --max-redirect=0 -O /usr/share/keyrings/llvm-snapshot.gpg.key https://apt.llvm.org/llvm-snapshot.gpg.key; \
+    wget --inet4-only --max-redirect=0 -O /usr/share/keyrings/llvm-snapshot.gpg.key https://apt.llvm.org/llvm-snapshot.gpg.key; \
     echo '8b2a587ffd672c4687e7581dad4b2f6c1bb2ad6b480cd9771ba2ff48e0b8c75d  /usr/share/keyrings/llvm-snapshot.gpg.key' | sha256sum -c -; \
     echo "deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg.key] https://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-22 main" > /etc/apt/sources.list.d/llvm.list; \
     apt-get update; \

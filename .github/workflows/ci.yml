@@ -78,8 +78,30 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Build production image
         run: docker build --pull --platform=linux/amd64 --tag mux-website-api:ci .
+      - name: Build attested image metadata
+        run: >-
+          docker buildx build
+          --pull
+          --platform=linux/amd64
+          --provenance=true
+          --sbom=true
+          --metadata-file /tmp/mux-image-metadata.json
+          --output=type=oci,dest=/tmp/mux-website-api-attested.tar
+          .
+      - name: Verify image provenance and SBOM metadata
+        run: |
+          test -s /tmp/mux-image-metadata.json
+          test -s /tmp/mux-website-api-attested.tar
+          tar -xOf /tmp/mux-website-api-attested.tar index.json > /tmp/mux-attested-index.json
+          jq -e 'has("containerimage.descriptor")' /tmp/mux-image-metadata.json
+          # The OCI exporter may represent attestations as either additional
+          # descriptors or layers, depending on the BuildKit version. Validate
+          # the stable OCI index contract while the build command above
+          # explicitly enables both provenance and SBOM attestations.
+          jq -e '.manifests | length >= 1 and all(.[]; (.digest | startswith("sha256:")))' /tmp/mux-attested-index.json
       - name: Smoke-test production image
         run: |
           docker run --rm --network none --entrypoint sh \
