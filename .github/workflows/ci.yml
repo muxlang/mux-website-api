@@ -93,10 +93,14 @@ jobs:
           .
       - name: Verify image provenance and SBOM metadata
         run: |
+          test -s /tmp/mux-image-metadata.json
+          test -s /tmp/mux-website-api-attested.tar
+          tar -xOf /tmp/mux-website-api-attested.tar index.json > /tmp/mux-attested-index.json
+          jq -e 'has("containerimage.descriptor")' /tmp/mux-image-metadata.json
           jq -e '
-            has("buildx.build.provenance") and
-            has("buildx.build.sbom")
-          ' /tmp/mux-image-metadata.json
+            [.manifests[]?.annotations["vnd.docker.reference.type"]?]
+            | any(. == "attestation-manifest")
+          ' /tmp/mux-attested-index.json
       - name: Smoke-test production image
         run: |
           docker run --rm --network none --entrypoint sh \
