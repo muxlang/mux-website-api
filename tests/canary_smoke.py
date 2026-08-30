@@ -48,6 +48,21 @@ def main():
     if health.status_code != 200 or health.get_json() != {"status": "ok"}:
         _fail(f"/health returned {health.status_code}: {health.data!r}")
 
+    # Exercise the production origin boundary before switching back to the
+    # compiler canary posture. This keeps the real compiler smoke independent
+    # of bubblewrap privileges while proving that an unauthenticated direct
+    # request cannot reach it.
+    os.environ["MUX_ENV"] = "production"
+    os.environ["MUX_API_ORIGIN_TOKEN"] = "canary-origin-token"
+    unauthenticated = client.post("/api/compile", json={"code": CANARY_CODE})
+    if unauthenticated.status_code != 403:
+        _fail(
+            "production /api/compile accepted an unauthenticated request: "
+            f"{unauthenticated.status_code} {unauthenticated.data!r}"
+        )
+    os.environ.pop("MUX_ENV")
+    os.environ.pop("MUX_API_ORIGIN_TOKEN")
+
     resp = client.post("/api/compile", json={"code": CANARY_CODE})
     body = resp.get_json()
 
