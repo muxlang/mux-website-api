@@ -24,8 +24,11 @@ binary and returns their output. Hosted on [Fly.io](https://fly.io) as
 
 - `POST /api/compile` with `{ "code": "<mux source>" }` -> `{ "output": "..." }`
 - `GET /health` for health checks
-- The service shells out to `mux run` (rate-limited, time-limited) and returns
-  stdout/stderr.
+- The service runs `mux run` inside a disposable bubblewrap namespace on the
+  existing Fly machine. The child has no network, a read-only view of the
+  runtime image, an isolated writable workspace, an allowlisted environment,
+  and CPU/memory/process/file limits. If that boundary cannot be created, the
+  request fails closed; it never falls back to an ordinary child process.
 
 ---
 
@@ -79,7 +82,9 @@ The production image fails closed unless `RATE_LIMIT_STORAGE_URI` points at a
 shared Redis or Valkey service. Configure the production credential as a Fly
 secret (`fly secrets set RATE_LIMIT_STORAGE_URI=rediss://...`); never commit it
 to `fly.toml`. A shared store is required because the service runs multiple
-Gunicorn workers and may be scheduled on more than one Machine.
+Gunicorn workers and may be scheduled on more than one Machine. The image also
+requires `/usr/bin/bwrap` and `/usr/bin/prlimit`; these are installed in the
+same image and do not require a second Fly application or machine.
 
 ---
 

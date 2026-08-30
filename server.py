@@ -92,6 +92,24 @@ MAX_CODE_SIZE = 100 * 1024
 MAX_OUTPUT_SIZE = 1 * 1024 * 1024
 READ_POLL_INTERVAL = 0.05
 
+# Production compilation runs inside bubblewrap on the existing Fly machine.
+# This keeps the deployment at one machine while making the process boundary
+# explicit: if the runner is missing or cannot create the required namespaces,
+# compilation fails closed instead of silently falling back to a normal child
+# process.  The image installs bubblewrap at this path; the override exists for
+# staging and for a future maintained runner.
+SANDBOX_BIN = "/usr/bin/bwrap"
+PRLIMIT_BIN = "/usr/bin/prlimit"
+SANDBOX_MEMORY_BYTES = 512 * 1024 * 1024
+SANDBOX_CPU_SECONDS = 31
+SANDBOX_MAX_PROCESSES = 64
+SANDBOX_MAX_FILES = 256
+SANDBOX_MAX_FILE_BYTES = 64 * 1024 * 1024
+
+
+class SandboxUnavailable(RuntimeError):
+    """The production isolation boundary could not be established."""
+
 
 def _env_int(name: str, default: int) -> int:
     raw = os.environ.get(name)
@@ -168,6 +186,125 @@ def _read_stream(
 
 def _clean_output(text: str) -> str:
     return text.replace("\x00", "")
+
+
+def _production_sandbox() -> bool:
+    return os.environ.get("MUX_ENV") == "production"
+
+
+def _resolve_executable(configured: str) -> str:
+    resolved = configured if os.path.isabs(configured) else shutil.which(configured)
+    if not resolved or not os.access(resolved, os.X_OK):
+        raise SandboxUnavailable(f"required executable is unavailable: {configured}")
+    return resolved
+
+
+def _compiler_environment() -> dict[str, str]:
+    """Return the only environment visible to an untrusted compiler process."""
+    return {
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "HOME": "/tmp",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "TMPDIR": "/tmp",
+        "MUX_RUNTIME_LIB": "/usr/local/lib/mux/libmux_runtime.a",
+        "LD_LIBRARY_PATH": "/usr/lib/llvm-22/lib",
+    }
+
+
+def _compiler_command(src_file: str, tmp_dir: str) -> list[str]:
+    """Build the compiler command, enforcing isolation in production."""
+    if not _production_sandbox():
+        return [MUX_BIN, "run", src_file]
+
+    sandbox = _resolve_executable(os.environ.get("MUX_SANDBOX_BIN", SANDBOX_BIN))
+    prlimit = _resolve_executable(os.environ.get("MUX_PRLIMIT_BIN", PRLIMIT_BIN))
+    compiler = _resolve_executable(MUX_BIN)
+    source_name = os.path.basename(src_file)
+    sandbox_source = f"/workspace/{source_name}"
+
+    sandbox_args = [
+        sandbox,
+        "--die-with-parent",
+        "--new-session",
+        "--unshare-user",
+        "--unshare-pid",
+        "--unshare-ipc",
+        "--unshare-uts",
+        "--unshare-net",
+        "--disable-userns",
+        "--clearenv",
+        "--ro-bind",
+        "/usr",
+        "/usr",
+        "--ro-bind",
+        "/etc",
+        "/etc",
+        "--ro-bind",
+        "/bin",
+        "/bin",
+        "--ro-bind",
+        "/lib",
+        "/lib",
+        "--ro-bind",
+        "/lib64",
+        "/lib64",
+        "--proc",
+        "/proc",
+        "--dev",
+        "/dev",
+        "--tmpfs",
+        "/tmp",
+        "--bind",
+        tmp_dir,
+        "/workspace",
+        "--chdir",
+        "/workspace",
+        "--setenv",
+        "PATH",
+        "/usr/local/bin:/usr/bin:/bin",
+        "--setenv",
+        "HOME",
+        "/tmp",
+        "--setenv",
+        "LANG",
+        "C.UTF-8",
+        "--setenv",
+        "LC_ALL",
+        "C.UTF-8",
+        "--setenv",
+        "TMPDIR",
+        "/tmp",
+        "--setenv",
+        "MUX_RUNTIME_LIB",
+        "/usr/local/lib/mux/libmux_runtime.a",
+        "--setenv",
+        "LD_LIBRARY_PATH",
+        "/usr/lib/llvm-22/lib",
+        "--",
+        compiler,
+        "run",
+        sandbox_source,
+    ]
+    return [
+        prlimit,
+        f"--cpu={SANDBOX_CPU_SECONDS}",
+        f"--as={SANDBOX_MEMORY_BYTES}",
+        f"--nproc={SANDBOX_MAX_PROCESSES}",
+        f"--nofile={SANDBOX_MAX_FILES}",
+        f"--fsize={SANDBOX_MAX_FILE_BYTES}",
+        "--",
+        *sandbox_args,
+    ]
+
+
+def _sandbox_setup_failed(stderr: str, returncode: int) -> bool:
+    """Recognize bubblewrap setup failures without hiding compiler diagnostics."""
+    return (
+        _production_sandbox()
+        and returncode != 0
+        and stderr.lstrip().startswith("bwrap:")
+    )
 
 
 def _kill_process_group(proc: subprocess.Popen) -> None:
@@ -283,12 +420,13 @@ def _execute_compiler(code):
         f.write(code)
 
     proc = subprocess.Popen(
-        [MUX_BIN, "run", src_file],
+        _compiler_command(src_file, tmp_dir),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=False,
         cwd=tmp_dir,
         start_new_session=True,
+        env=_compiler_environment() if _production_sandbox() else None,
     )
 
     output_limit_exceeded = threading.Event()
@@ -331,10 +469,15 @@ def _compile_with_cleanup(code):
         stdout, stderr, returncode, timed_out, output_too_large, tmp_dir = (
             _execute_compiler(code)
         )
+        if _sandbox_setup_failed(stderr, returncode):
+            raise SandboxUnavailable(stderr)
         return _format_result(stdout, stderr, returncode, timed_out, output_too_large)
     except FileNotFoundError:
         logger.error("Compiler binary not found at %s", MUX_BIN)
         return jsonify({"error": "Compiler not found on server"}), 500
+    except SandboxUnavailable:
+        logger.exception("Compiler sandbox is unavailable")
+        return jsonify({"error": "Compiler sandbox unavailable"}), 503
     except Exception:
         logger.exception("Unexpected error during compilation")
         return jsonify({"error": "Internal server error"}), 500

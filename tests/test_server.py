@@ -46,6 +46,61 @@ def test_env_int_non_positive_falls_back(monkeypatch):
     assert server._env_int("SOME_INT", 7) == 7
 
 
+def test_compiler_command_is_direct_outside_production(monkeypatch, tmp_path):
+    monkeypatch.delenv("MUX_ENV", raising=False)
+    monkeypatch.setattr(server, "MUX_BIN", "/bin/echo")
+    source = tmp_path / "input.mux"
+    command = server._compiler_command(os.fspath(source), os.fspath(tmp_path))
+    assert command == ["/bin/echo", "run", os.fspath(source)]
+
+
+def test_production_compiler_command_requires_and_configures_sandbox(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("MUX_ENV", "production")
+    monkeypatch.setenv("MUX_SANDBOX_BIN", "/usr/bin/bwrap")
+    monkeypatch.setenv("MUX_PRLIMIT_BIN", "/usr/bin/prlimit")
+    monkeypatch.setattr(server, "MUX_BIN", "/bin/echo")
+
+    source = tmp_path / "input.mux"
+    command = server._compiler_command(os.fspath(source), os.fspath(tmp_path))
+
+    assert command[0] == "/usr/bin/prlimit"
+    assert "/usr/bin/bwrap" in command
+    assert "--unshare-net" in command
+    assert "--clearenv" in command
+    bind = command.index("--bind")
+    assert command[bind : bind + 3] == ["--bind", os.fspath(tmp_path), "/workspace"]
+    assert command[-3:] == ["/bin/echo", "run", "/workspace/input.mux"]
+
+
+def test_production_compiler_command_fails_closed_when_runner_missing(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("MUX_ENV", "production")
+    monkeypatch.setenv("MUX_SANDBOX_BIN", "/nonexistent/bwrap")
+    monkeypatch.setattr(server, "MUX_BIN", "/bin/echo")
+
+    with pytest.raises(server.SandboxUnavailable):
+        server._compiler_command(os.fspath(tmp_path / "input.mux"), os.fspath(tmp_path))
+
+
+def test_compiler_environment_is_allowlisted(monkeypatch):
+    monkeypatch.setenv("SERVICE_SECRET", "must-not-leak")
+    environment = server._compiler_environment()
+    assert environment["PATH"] == "/usr/local/bin:/usr/bin:/bin"
+    assert "SERVICE_SECRET" not in environment
+
+
+def test_bwrap_setup_failure_is_detected_only_in_production(monkeypatch):
+    monkeypatch.setenv("MUX_ENV", "production")
+    assert server._sandbox_setup_failed("bwrap: namespace setup failed", 1)
+    assert not server._sandbox_setup_failed("compiler: syntax error", 1)
+
+    monkeypatch.delenv("MUX_ENV")
+    assert not server._sandbox_setup_failed("bwrap: namespace setup failed", 1)
+
+
 def test_rate_limit_storage_defaults_to_memory_outside_production(monkeypatch):
     monkeypatch.delenv("RATE_LIMIT_STORAGE_URI", raising=False)
     monkeypatch.delenv("MUX_ENV", raising=False)
@@ -182,6 +237,18 @@ def test_compile_binary_missing(client, monkeypatch):
     resp = client.post("/api/compile", json={"code": "x"})
     assert resp.status_code == 500
     assert resp.get_json()["error"] == "Compiler not found on server"
+
+
+def test_compile_fails_closed_when_sandbox_is_unavailable(client, monkeypatch):
+    def unavailable(_source, _tmp):
+        raise server.SandboxUnavailable()
+
+    monkeypatch.setattr(server, "_compiler_command", unavailable)
+
+    resp = client.post("/api/compile", json={"code": "x"})
+
+    assert resp.status_code == 503
+    assert resp.get_json()["error"] == "Compiler sandbox unavailable"
 
 
 def _fake_mux(tmp_path, source):

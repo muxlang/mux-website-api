@@ -17,7 +17,7 @@ ARG MUX_VERSION=0.10.1
 # binary. The published .sha256 references a "dist/" path, so verify by hash.
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-release wget; \
+    apt-get install -y --no-install-recommends bubblewrap ca-certificates curl gnupg lsb-release util-linux wget; \
     wget --max-redirect=0 -O /usr/share/keyrings/llvm-snapshot.gpg.key https://apt.llvm.org/llvm-snapshot.gpg.key; \
     echo '8b2a587ffd672c4687e7581dad4b2f6c1bb2ad6b480cd9771ba2ff48e0b8c75d  /usr/share/keyrings/llvm-snapshot.gpg.key' | sha256sum -c -; \
     echo "deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg.key] https://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-22 main" > /etc/apt/sources.list.d/llvm.list; \
