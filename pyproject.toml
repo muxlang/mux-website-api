@@ -14,3 +14,14 @@ python_version = "3.12"
 check_untyped_defs = true
 ignore_missing_imports = true
 warn_unused_ignores = true
+
+# ``server.py`` is the trust boundary for untrusted compilation. Keep a
+# modest branch floor so new error, timeout, and teardown paths cannot be
+# hidden by line-only coverage. This is intentionally scoped to the API
+# service rather than imposed as a blanket organization-wide percentage.
+[tool.coverage.run]
+branch = true
+source = ["server.py"]
+
+[tool.coverage.report]
+fail_under = 85
