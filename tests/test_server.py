@@ -82,8 +82,10 @@ def test_production_compiler_command_fails_closed_when_runner_missing(
     monkeypatch.setenv("MUX_SANDBOX_BIN", "/nonexistent/bwrap")
     monkeypatch.setattr(server, "MUX_BIN", "/bin/echo")
 
+    source_path = os.fspath(tmp_path / "input.mux")
+    temp_path = os.fspath(tmp_path)
     with pytest.raises(server.SandboxUnavailable):
-        server._compiler_command(os.fspath(tmp_path / "input.mux"), os.fspath(tmp_path))
+        server._compiler_command(source_path, temp_path)
 
 
 def test_compiler_environment_is_allowlisted(monkeypatch):

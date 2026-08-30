@@ -105,6 +105,8 @@ SANDBOX_CPU_SECONDS = 31
 SANDBOX_MAX_PROCESSES = 64
 SANDBOX_MAX_FILES = 256
 SANDBOX_MAX_FILE_BYTES = 64 * 1024 * 1024
+SANDBOX_TMP_DIR = "/sandbox-tmp"
+SANDBOX_LOCALE = "C.UTF-8"
 
 
 class SandboxUnavailable(RuntimeError):
@@ -203,10 +205,10 @@ def _compiler_environment() -> dict[str, str]:
     """Return the only environment visible to an untrusted compiler process."""
     return {
         "PATH": "/usr/local/bin:/usr/bin:/bin",
-        "HOME": "/tmp",
-        "LANG": "C.UTF-8",
-        "LC_ALL": "C.UTF-8",
-        "TMPDIR": "/tmp",
+        "HOME": SANDBOX_TMP_DIR,
+        "LANG": SANDBOX_LOCALE,
+        "LC_ALL": SANDBOX_LOCALE,
+        "TMPDIR": SANDBOX_TMP_DIR,
         "MUX_RUNTIME_LIB": "/usr/local/lib/mux/libmux_runtime.a",
         "LD_LIBRARY_PATH": "/usr/lib/llvm-22/lib",
     }
@@ -254,7 +256,7 @@ def _compiler_command(src_file: str, tmp_dir: str) -> list[str]:
         "--dev",
         "/dev",
         "--tmpfs",
-        "/tmp",
+        SANDBOX_TMP_DIR,
         "--bind",
         tmp_dir,
         "/workspace",
@@ -265,16 +267,16 @@ def _compiler_command(src_file: str, tmp_dir: str) -> list[str]:
         "/usr/local/bin:/usr/bin:/bin",
         "--setenv",
         "HOME",
-        "/tmp",
+        SANDBOX_TMP_DIR,
         "--setenv",
         "LANG",
-        "C.UTF-8",
+        SANDBOX_LOCALE,
         "--setenv",
         "LC_ALL",
-        "C.UTF-8",
+        SANDBOX_LOCALE,
         "--setenv",
         "TMPDIR",
-        "/tmp",
+        SANDBOX_TMP_DIR,
         "--setenv",
         "MUX_RUNTIME_LIB",
         "/usr/local/lib/mux/libmux_runtime.a",
