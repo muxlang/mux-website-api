@@ -105,6 +105,16 @@ The slim image bundles clang-22 + the LLVM runtime libraries (the compiler shell
 out to clang and links LLVM at compile time) and sets `MUX_RUNTIME_LIB` so it
 never tries to build the runtime from source.
 
+After both the API and Worker deploys, run the credential-free integration
+smoke from a trusted machine. It checks that direct Fly requests are rejected
+and that the Worker can compile through the authenticated origin path:
+
+```bash
+MUX_WORKER_COMPILE_URL=https://mux-ai.corniedj.workers.dev/api/compile \
+MUX_API_ORIGIN_URL=https://mux-lang-api.fly.dev/api/compile \
+python tests/origin_contract_smoke.py
+```
+
 ---
 
 ## Related repositories
