@@ -85,7 +85,7 @@ jobs:
           docker run --rm --network none --entrypoint sh \
             -e RATE_LIMIT_STORAGE_URI=redis://smoke-test mux-website-api:ci -eu -c '
               python3 -c "import flask, flask_cors, flask_limiter, gunicorn"
-              python3 -c "import server; assert '--unshare-net' in server._compiler_command('/workspace/input.mux', '/tmp')"
+              python3 -c "import server; assert \"--unshare-net\" in server._compiler_command(\"/workspace/input.mux\", \"/tmp\")"
               printf "func main() returns void {\\n    return\\n}\\n" > /tmp/smoke.mux
               mux run /tmp/smoke.mux
             '

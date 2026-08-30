@@ -61,6 +61,7 @@ def test_production_compiler_command_requires_and_configures_sandbox(
     monkeypatch.setenv("MUX_SANDBOX_BIN", "/usr/bin/bwrap")
     monkeypatch.setenv("MUX_PRLIMIT_BIN", "/usr/bin/prlimit")
     monkeypatch.setattr(server, "MUX_BIN", "/bin/echo")
+    monkeypatch.setattr(server, "_resolve_executable", lambda configured: configured)
 
     source = tmp_path / "input.mux"
     command = server._compiler_command(os.fspath(source), os.fspath(tmp_path))

@@ -299,11 +299,11 @@ def _compiler_command(src_file: str, tmp_dir: str) -> list[str]:
 
 
 def _sandbox_setup_failed(stderr: str, returncode: int) -> bool:
-    """Recognize bubblewrap setup failures without hiding compiler diagnostics."""
+    """Recognize runner setup failures without hiding compiler diagnostics."""
     return (
         _production_sandbox()
         and returncode != 0
-        and stderr.lstrip().startswith("bwrap:")
+        and stderr.lstrip().startswith(("bwrap:", "prlimit:"))
     )
 
 
