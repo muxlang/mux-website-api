@@ -1,3 +1,4 @@
+import hmac
 import ipaddress
 import logging
 import os
@@ -34,26 +35,20 @@ CORS(
 
 
 def _rate_limit_storage_uri() -> str:
-    """Return the configured shared limiter store, failing closed in Fly.
+    """Return the configured limiter store.
 
-    An in-process store cannot enforce a limit across Gunicorn workers or Fly
-    Machines. Keeping it as a local-development default is useful, but
-    silently deploying it would make the advertised request budget false.
-    Production therefore requires an explicitly configured shared store.
+    The public endpoint is the Cloudflare Worker, which applies the
+    cross-request/per-client limit before forwarding to this origin. The API
+    keeps Flask-Limiter as a bounded defense-in-depth limit. A shared Redis or
+    Valkey store is still supported when an operator already has one, but it
+    is not required for the single-machine deployment.
     """
     configured = os.environ.get("RATE_LIMIT_STORAGE_URI")
-    if os.environ.get("MUX_ENV") == "production":
-        if not configured:
-            raise RuntimeError(
-                "RATE_LIMIT_STORAGE_URI must be configured for production; "
-                "use a shared Redis or Valkey URI"
-            )
-        if urlparse(configured).scheme not in {"redis", "rediss"}:
-            raise RuntimeError(
-                "RATE_LIMIT_STORAGE_URI must use redis:// or rediss:// in production"
-            )
-        return configured
     if configured:
+        if urlparse(configured).scheme not in {"redis", "rediss", "memory"}:
+            raise RuntimeError(
+                "RATE_LIMIT_STORAGE_URI must use redis://, rediss://, or memory://"
+            )
         return configured
     return "memory://"
 
@@ -91,6 +86,7 @@ limiter = Limiter(
 MAX_CODE_SIZE = 100 * 1024
 MAX_OUTPUT_SIZE = 1 * 1024 * 1024
 READ_POLL_INTERVAL = 0.05
+ORIGIN_AUTH_HEADER = "X-Mux-Origin-Token"
 
 # Production compilation runs inside bubblewrap on the existing Fly machine.
 # This keeps the deployment at one machine while making the process boundary
@@ -192,6 +188,35 @@ def _clean_output(text: str) -> str:
 
 def _production_sandbox() -> bool:
     return os.environ.get("MUX_ENV") == "production"
+
+
+def _origin_auth_failure():
+    """Return a response when a production compile request lacks origin auth."""
+    configured = os.environ.get("MUX_API_ORIGIN_TOKEN")
+    if not configured:
+        logger.error("MUX_API_ORIGIN_TOKEN is not configured")
+        return (
+            jsonify(
+                {
+                    "error": "Compile origin authentication is unavailable",
+                    "errorCode": "ORIGIN_AUTH_UNAVAILABLE",
+                }
+            ),
+            503,
+        )
+
+    supplied = request.headers.get(ORIGIN_AUTH_HEADER, "")
+    if not hmac.compare_digest(supplied, configured):
+        return (
+            jsonify(
+                {
+                    "error": "Compile requests must come through the trusted origin",
+                    "errorCode": "ORIGIN_AUTH_REQUIRED",
+                }
+            ),
+            403,
+        )
+    return None
 
 
 def _resolve_executable(configured: str) -> str:
@@ -491,6 +516,10 @@ def _compile_with_cleanup(code):
 @app.route("/api/compile", methods=["POST"])
 @limiter.limit("20 per minute")
 def compile_code():
+    if _production_sandbox():
+        auth_failure = _origin_auth_failure()
+        if auth_failure:
+            return auth_failure
     data = request.get_json(silent=True)
     validated_code, error_response = _validate_compile_request(data)
     if error_response:

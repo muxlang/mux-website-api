@@ -110,18 +110,16 @@ def test_rate_limit_storage_defaults_to_memory_outside_production(monkeypatch):
     assert server._rate_limit_storage_uri() == "memory://"
 
 
-def test_rate_limit_storage_requires_shared_store_in_production(monkeypatch):
+def test_rate_limit_storage_defaults_to_memory_in_production(monkeypatch):
     monkeypatch.delenv("RATE_LIMIT_STORAGE_URI", raising=False)
     monkeypatch.setenv("MUX_ENV", "production")
-    with pytest.raises(RuntimeError, match="RATE_LIMIT_STORAGE_URI"):
-        server._rate_limit_storage_uri()
+    assert server._rate_limit_storage_uri() == "memory://"
 
 
 def test_rate_limit_storage_rejects_process_local_store_in_production(monkeypatch):
     monkeypatch.setenv("MUX_ENV", "production")
     monkeypatch.setenv("RATE_LIMIT_STORAGE_URI", "memory://")
-    with pytest.raises(RuntimeError, match="redis://"):
-        server._rate_limit_storage_uri()
+    assert server._rate_limit_storage_uri() == "memory://"
 
 
 def test_rate_limit_storage_accepts_shared_store_in_production(monkeypatch):
@@ -180,6 +178,59 @@ def test_health_ok(client):
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.get_json() == {"status": "ok"}
+
+
+def test_compile_rejects_missing_origin_auth_in_production(client, monkeypatch):
+    monkeypatch.setenv("MUX_ENV", "production")
+    monkeypatch.setenv("MUX_API_ORIGIN_TOKEN", "t" * 32)
+
+    resp = client.post("/api/compile", json={"code": "x"})
+
+    assert resp.status_code == 403
+    assert resp.get_json()["errorCode"] == "ORIGIN_AUTH_REQUIRED"
+
+
+def test_compile_rejects_wrong_origin_auth_in_production(client, monkeypatch):
+    monkeypatch.setenv("MUX_ENV", "production")
+    monkeypatch.setenv("MUX_API_ORIGIN_TOKEN", "t" * 32)
+
+    resp = client.post(
+        "/api/compile",
+        json={"code": "x"},
+        headers={server.ORIGIN_AUTH_HEADER: "wrong"},
+    )
+
+    assert resp.status_code == 403
+    assert resp.get_json()["errorCode"] == "ORIGIN_AUTH_REQUIRED"
+
+
+def test_compile_rejects_unconfigured_origin_auth_in_production(client, monkeypatch):
+    monkeypatch.setenv("MUX_ENV", "production")
+    monkeypatch.delenv("MUX_API_ORIGIN_TOKEN", raising=False)
+
+    resp = client.post("/api/compile", json={"code": "x"})
+
+    assert resp.status_code == 503
+    assert resp.get_json()["errorCode"] == "ORIGIN_AUTH_UNAVAILABLE"
+
+
+def test_compile_accepts_valid_origin_auth_in_production(client, monkeypatch):
+    monkeypatch.setenv("MUX_ENV", "production")
+    token = "t" * 32
+    monkeypatch.setenv("MUX_API_ORIGIN_TOKEN", token)
+    monkeypatch.setattr(server, "MUX_BIN", "/bin/echo")
+    monkeypatch.setattr(
+        server, "_compiler_command", lambda source, _tmp: ["/bin/echo", "run", source]
+    )
+
+    resp = client.post(
+        "/api/compile",
+        json={"code": "x"},
+        headers={server.ORIGIN_AUTH_HEADER: token},
+    )
+
+    assert resp.status_code == 200
+    assert "output" in resp.get_json()
 
 
 # --- /api/compile validation -------------------------------------------------
