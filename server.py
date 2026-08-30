@@ -419,6 +419,48 @@ def _finish_readers(proc, readers):
             logger.error("Compiler output reader did not stop for pid=%s", proc.pid)
 
 
+def _make_workspace_writable(tmp_dir: str) -> bool:
+    """Restore directory traversal after an untrusted chmod."""
+    walk_failed = False
+
+    def onerror(_error):
+        nonlocal walk_failed
+        walk_failed = True
+
+    try:
+        os.chmod(tmp_dir, 0o700)
+    except OSError:
+        return False
+    for root, directories, _files in os.walk(
+        tmp_dir, topdown=True, onerror=onerror, followlinks=False
+    ):
+        for directory in directories:
+            path = os.path.join(root, directory)
+            if not os.path.islink(path):
+                try:
+                    os.chmod(path, 0o700)
+                except OSError:
+                    walk_failed = True
+    return not walk_failed
+
+
+def _cleanup_workspace(tmp_dir: str) -> bool:
+    """Remove a request workspace and report if teardown did not finish."""
+    if not os.path.lexists(tmp_dir):
+        return True
+    if not _make_workspace_writable(tmp_dir):
+        logger.error("Compiler workspace cannot be made removable: %s", tmp_dir)
+        return False
+    try:
+        shutil.rmtree(tmp_dir)
+    except FileNotFoundError:
+        return True
+    except Exception:
+        logger.exception("Failed to remove compiler workspace %s", tmp_dir)
+        return False
+    return not os.path.lexists(tmp_dir)
+
+
 def _validate_compile_request(data):
     if not isinstance(data, dict):
         return None, (jsonify({"error": "Request body must be a JSON object"}), 400)
@@ -440,8 +482,7 @@ def _validate_compile_request(data):
     return raw_code, None
 
 
-def _execute_compiler(code):
-    tmp_dir = tempfile.mkdtemp(prefix="mux_")
+def _execute_compiler(code, tmp_dir):
     src_file = os.path.join(tmp_dir, f"input_{uuid.uuid4().hex}.mux")
     with open(src_file, "w", encoding="utf-8") as f:
         f.write(code)
@@ -487,30 +528,34 @@ def _execute_compiler(code):
         b"".join(stderr_chunks).decode("utf-8", errors="replace")
     ).strip()
 
-    return stdout, stderr, proc.returncode, timed_out, output_too_large, tmp_dir
+    return stdout, stderr, proc.returncode, timed_out, output_too_large
 
 
 def _compile_with_cleanup(code):
-    tmp_dir = None
+    tmp_dir = tempfile.mkdtemp(prefix="mux_")
     try:
-        stdout, stderr, returncode, timed_out, output_too_large, tmp_dir = (
-            _execute_compiler(code)
+        stdout, stderr, returncode, timed_out, output_too_large = _execute_compiler(
+            code, tmp_dir
         )
         if _sandbox_setup_failed(stderr, returncode):
             raise SandboxUnavailable(stderr)
-        return _format_result(stdout, stderr, returncode, timed_out, output_too_large)
+        response = _format_result(
+            stdout, stderr, returncode, timed_out, output_too_large
+        )
     except FileNotFoundError:
         logger.error("Compiler binary not found at %s", MUX_BIN)
-        return jsonify({"error": "Compiler not found on server"}), 500
+        response = jsonify({"error": "Compiler not found on server"}), 500
     except SandboxUnavailable:
         logger.exception("Compiler sandbox is unavailable")
-        return jsonify({"error": "Compiler sandbox unavailable"}), 503
+        response = jsonify({"error": "Compiler sandbox unavailable"}), 503
     except Exception:
         logger.exception("Unexpected error during compilation")
-        return jsonify({"error": "Internal server error"}), 500
-    finally:
-        if tmp_dir and os.path.exists(tmp_dir):
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+        response = jsonify({"error": "Internal server error"}), 500
+
+    if not _cleanup_workspace(tmp_dir):
+        status = 503 if _production_sandbox() else 500
+        return jsonify({"error": "Compiler sandbox unavailable"}), status
+    return response
 
 
 @app.route("/api/compile", methods=["POST"])

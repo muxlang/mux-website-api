@@ -75,6 +75,44 @@ def test_production_compiler_command_requires_and_configures_sandbox(
     assert command[-3:] == ["/bin/echo", "run", "/workspace/input.mux"]
 
 
+def test_production_compiler_command_enforces_resource_and_namespace_controls(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("MUX_ENV", "production")
+    monkeypatch.setattr(server, "MUX_BIN", "/bin/echo")
+    monkeypatch.setattr(server, "_resolve_executable", lambda configured: configured)
+
+    command = server._compiler_command(
+        os.fspath(tmp_path / "input.mux"), os.fspath(tmp_path)
+    )
+
+    assert command[:7] == [
+        "/usr/bin/prlimit",
+        "--cpu=31",
+        "--as=536870912",
+        "--nproc=64",
+        "--nofile=256",
+        "--fsize=67108864",
+        "--",
+    ]
+    for option in (
+        "--die-with-parent",
+        "--new-session",
+        "--unshare-user",
+        "--unshare-pid",
+        "--unshare-ipc",
+        "--unshare-uts",
+        "--unshare-net",
+        "--disable-userns",
+        "--clearenv",
+        "--proc",
+        "--dev",
+        "--tmpfs",
+        "--chdir",
+    ):
+        assert option in command
+
+
 def test_production_compiler_command_fails_closed_when_runner_missing(
     monkeypatch, tmp_path
 ):
@@ -93,6 +131,15 @@ def test_compiler_environment_is_allowlisted(monkeypatch):
     environment = server._compiler_environment()
     assert environment["PATH"] == "/usr/local/bin:/usr/bin:/bin"
     assert "SERVICE_SECRET" not in environment
+    assert set(environment) == {
+        "PATH",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "TMPDIR",
+        "MUX_RUNTIME_LIB",
+        "LD_LIBRARY_PATH",
+    }
 
 
 def test_bwrap_setup_failure_is_detected_only_in_production(monkeypatch):
@@ -291,6 +338,156 @@ def test_compile_binary_missing(client, monkeypatch):
     resp = client.post("/api/compile", json={"code": "x"})
     assert resp.status_code == 500
     assert resp.get_json()["error"] == "Compiler not found on server"
+
+
+def test_cleanup_workspace_repairs_untrusted_permissions(tmp_path):
+    workspace = tmp_path / "workspace"
+    nested = workspace / "nested"
+    nested.mkdir(parents=True)
+    nested.chmod(0)
+
+    assert server._cleanup_workspace(os.fspath(workspace))
+    assert not workspace.exists()
+
+
+def test_cleanup_workspace_skips_symlink_targets(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    target = tmp_path / "outside"
+    target.write_text("must survive", encoding="utf-8")
+    (workspace / "link").symlink_to(target)
+
+    assert server._cleanup_workspace(os.fspath(workspace))
+    assert not workspace.exists()
+    assert target.read_text(encoding="utf-8") == "must survive"
+
+
+def test_cleanup_workspace_accepts_already_removed_path(tmp_path):
+    assert server._cleanup_workspace(os.fspath(tmp_path / "missing"))
+
+
+def test_cleanup_workspace_fails_when_root_cannot_be_made_writable(
+    monkeypatch, tmp_path
+):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    def fail_chmod(_path, _mode):
+        raise OSError("chmod failed")
+
+    monkeypatch.setattr(server.os, "chmod", fail_chmod)
+
+    assert not server._cleanup_workspace(os.fspath(workspace))
+    workspace.rmdir()
+
+
+def test_cleanup_workspace_fails_when_walk_reports_error(monkeypatch, tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    def failing_walk(_path, *, topdown, onerror, followlinks):
+        onerror(OSError("walk failed"))
+        return iter(())
+
+    monkeypatch.setattr(server.os, "walk", failing_walk)
+
+    assert not server._cleanup_workspace(os.fspath(workspace))
+    workspace.rmdir()
+
+
+def test_cleanup_workspace_fails_when_nested_chmod_fails(monkeypatch, tmp_path):
+    workspace = tmp_path / "workspace"
+    nested = workspace / "nested"
+    nested.mkdir(parents=True)
+    real_chmod = server.os.chmod
+
+    def fail_nested_chmod(path, mode):
+        if path == os.fspath(nested):
+            raise OSError("nested chmod failed")
+        real_chmod(path, mode)
+
+    monkeypatch.setattr(server.os, "chmod", fail_nested_chmod)
+
+    assert not server._cleanup_workspace(os.fspath(workspace))
+    nested.rmdir()
+    workspace.rmdir()
+
+
+def test_cleanup_workspace_treats_rmtree_race_as_success(monkeypatch, tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    def disappeared(_path):
+        raise FileNotFoundError
+
+    monkeypatch.setattr(server.shutil, "rmtree", disappeared)
+
+    assert server._cleanup_workspace(os.fspath(workspace))
+    workspace.rmdir()
+
+
+def test_cleanup_workspace_fails_when_rmtree_raises(monkeypatch, tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    def failed(_path):
+        raise OSError("rmtree failed")
+
+    monkeypatch.setattr(server.shutil, "rmtree", failed)
+
+    assert not server._cleanup_workspace(os.fspath(workspace))
+    workspace.rmdir()
+
+
+def test_cleanup_workspace_fails_when_rmtree_leaves_path(monkeypatch, tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setattr(server.shutil, "rmtree", lambda _path: None)
+
+    assert not server._cleanup_workspace(os.fspath(workspace))
+    workspace.rmdir()
+
+
+def test_compile_startup_failure_still_cleans_workspace(client, monkeypatch, tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setattr(server.tempfile, "mkdtemp", lambda prefix: os.fspath(workspace))
+    monkeypatch.setattr(
+        server,
+        "_compiler_command",
+        lambda _source, _tmp: (_ for _ in ()).throw(FileNotFoundError),
+    )
+
+    resp = client.post("/api/compile", json={"code": "x"})
+
+    assert resp.status_code == 500
+    assert not workspace.exists()
+
+
+def test_compile_fails_closed_when_workspace_teardown_fails(
+    client, monkeypatch, tmp_path
+):
+    monkeypatch.setenv("MUX_ENV", "production")
+    monkeypatch.setenv("MUX_API_ORIGIN_TOKEN", "t" * 32)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setattr(server.tempfile, "mkdtemp", lambda prefix: os.fspath(workspace))
+    monkeypatch.setattr(
+        server,
+        "_execute_compiler",
+        lambda _code, _tmp: ("", "", 0, False, False),
+    )
+    monkeypatch.setattr(server, "_cleanup_workspace", lambda _tmp: False)
+
+    resp = client.post(
+        "/api/compile",
+        json={"code": "x"},
+        headers={server.ORIGIN_AUTH_HEADER: "t" * 32},
+    )
+
+    assert resp.status_code == 503
+    assert resp.get_json()["error"] == "Compiler sandbox unavailable"
+    workspace.rmdir()
 
 
 def test_compile_fails_closed_when_sandbox_is_unavailable(client, monkeypatch):
