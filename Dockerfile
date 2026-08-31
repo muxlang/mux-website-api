@@ -9,7 +9,7 @@
 FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 
 # The Mux compiler release the playground runs. Bump deliberately to upgrade.
-ARG MUX_VERSION=0.10.2
+ARG MUX_VERSION=0.10.1
 # The released compiler currently ships amd64 only. BuildKit supplies
 # TARGETARCH for the requested target platform; use it rather than uname so a
 # cross-build cannot accidentally inspect the builder's architecture.

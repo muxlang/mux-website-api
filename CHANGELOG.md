@@ -17,8 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the sandbox runner is unavailable.
 
 ### Changed
-- **Compiler pin**: Prepare the playground image to run `mux` 0.10.2 after the
-  compiler release exists. Deployment remains a maintainer step.
+- **Compiler pin**: Keep the playground on released `mux` 0.10.1 until the next
+  compiler release exists. The compiler pin and its archive checksum will move
+  together in a follow-up deployment PR.
 
 ## [0.5.0] - 2026-07-13
 
