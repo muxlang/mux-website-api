@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 2026-08-31
 
 ### Fixed
 - **Compiler process cleanup**: Drain compiler output to EOF, enforce the combined
@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   namespace with no network, an allowlisted environment, an isolated workspace,
   and bounded CPU, memory, process, file, and output resources. Fail closed when
   the sandbox runner is unavailable.
+
+### Changed
+- **Compiler pin**: Keep the playground on released `mux` 0.10.1 until the next
+  compiler release exists. The compiler pin and its archive checksum will move
+  together in a follow-up deployment PR.
 
 ## [0.5.0] - 2026-07-13
 

@@ -39,7 +39,8 @@ binary and returns their output. Hosted on [Fly.io](https://fly.io) as
 
 The `Dockerfile` installs a **released** `mux` binary (no Rust/LLVM build),
 pinned via `ARG MUX_VERSION`. The playground therefore runs a known, deliberately
-chosen compiler release. To upgrade the playground:
+chosen compiler release. The API itself is identified by its deployment commit
+and image digest, not by a separate SemVer release. To upgrade the playground:
 
 1. Ensure the target version is released in
    [mux-compiler](https://github.com/muxlang/mux-compiler) (the
