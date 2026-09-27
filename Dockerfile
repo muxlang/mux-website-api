@@ -16,7 +16,7 @@ ARG MUX_VERSION=0.11.0
 ARG TARGETARCH=amd64
 # Keep the isolation boundary packages explicit. These are amd64 versions from
 # Ubuntu Noble security; update them deliberately with the base-image refresh.
-ARG BUBBLEWRAP_VERSION=0.9.0-1ubuntu0.1
+ARG BUBBLEWRAP_VERSION=0.9.0-1ubuntu0.3
 ARG UTIL_LINUX_VERSION=2.39.3-9ubuntu6.5
 
 # `mux run` shells out to clang and the mux binary dynamically links LLVM, so the
