@@ -22,9 +22,11 @@ changing the compiler/runtime contract or deployment behavior.
 
 Run `python -m py_compile server.py`, `pytest`, the configured Ruff checks, and
 `docker build -t mux-website-api .` when the image or process runner changes.
-For Python, dependency, or CI workflow changes, the pre-commit hook runs syntax
-and import checks plus the focused Python test suite. CI keeps the coverage
-gate and deployment-level canaries.
+For Python, dependency, or `.github/workflows/ci.yml` changes, the pre-commit
+hook runs syntax and import checks plus the focused Python test suite. CI keeps
+the coverage gate and scheduled compiler-main canary. The Worker-to-Fly origin
+contract smoke remains a manual post-deployment check. Run the command in the
+README after deploying both the API and Worker.
 
 ## Documentation
 

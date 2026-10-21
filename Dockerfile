@@ -63,10 +63,8 @@ RUN ln -sf /usr/bin/clang-22 /usr/local/bin/clang
 COPY requirements.lock /app/requirements.lock
 COPY requirements.txt /app/requirements.txt
 COPY server.py /app/server.py
-RUN echo 'uv==0.6.5' \
-        '--hash=sha256:15dae245979add192c4845947da1a9141f95c19403d1c0d75019182e6882e7d4' \
-        '--hash=sha256:b5445a509f500bbf18faba4e7cf5cc9763617c335d58afaa5f3e5a6e388dd4ee' \
-        '--hash=sha256:26a90e69d6438de2ec03ab452cc48d1cb375249c6b6980f4ed177f324a5ad8b3' \
+RUN echo 'uv==0.13.4' \
+        '--hash=sha256:05e4332791b4d55b6dde8695b7fa6079b26991519f44760887c5dfbd5ca4fe53' \
         > /tmp/uv-req.txt && \
     pip3 install --no-cache-dir --break-system-packages --only-binary :all: --require-hashes \
         -r /tmp/uv-req.txt && \
