@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pin the playground to Mux 0.14.0 and verify the published Linux archive
   against its release checksum.
 
+### Fixed
+- Install zlib development files so the playground can link programs compiled
+  by Mux 0.14.0.
+
 ## 2026-09-27
 
 ### Changed
