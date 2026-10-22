@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2026-10-21
+
+### Changed
+- Pin the playground to Mux 0.14.0 and verify the published Linux archive
+  against its release checksum.
+
+### Fixed
+- Install zlib development files so the playground can link programs compiled
+  by Mux 0.14.0.
+
 ## 2026-09-27
 
 ### Changed

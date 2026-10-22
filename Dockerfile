@@ -9,7 +9,7 @@
 FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 
 # The Mux compiler release the playground runs. Bump deliberately to upgrade.
-ARG MUX_VERSION=0.12.0
+ARG MUX_VERSION=0.14.0
 # The released compiler currently ships amd64 only. BuildKit supplies
 # TARGETARCH for the requested target platform; use it rather than uname so a
 # cross-build cannot accidentally inspect the builder's architecture.
@@ -32,9 +32,9 @@ RUN set -eux; \
     echo '8b2a587ffd672c4687e7581dad4b2f6c1bb2ad6b480cd9771ba2ff48e0b8c75d  /usr/share/keyrings/llvm-snapshot.gpg.key' | sha256sum -c -; \
     echo "deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg.key] https://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-22 main" > /etc/apt/sources.list.d/llvm.list; \
     apt-get update; \
-    apt-get install -y --no-install-recommends clang-22 llvm-22 python3 python3-pip; \
+    apt-get install -y --no-install-recommends clang-22 llvm-22 python3 python3-pip zlib1g-dev; \
     case "$TARGETARCH" in \
-        amd64) target="linux-x86_64"; archive_sha="8a22585617634058cac41aaccdacf8cca13ae7c8a2c8cdc683eaf5bb97e1c87f" ;; \
+        amd64) target="linux-x86_64"; archive_sha="a8cc06345e4ebe1b5f31852a807222652269bf384f372393930916923cfdcff8" ;; \
         arm64) echo "unsupported architecture: $TARGETARCH (mux v${MUX_VERSION} has no published arm64 compiler asset)" >&2; exit 1 ;; \
         *) echo "unsupported architecture: ${TARGETARCH:-unknown}" >&2; exit 1 ;; \
     esac; \
