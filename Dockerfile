@@ -9,7 +9,7 @@
 FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 
 # The Mux compiler release the playground runs. Bump deliberately to upgrade.
-ARG MUX_VERSION=0.14.0
+ARG MUX_VERSION=0.15.0
 # The released compiler currently ships amd64 only. BuildKit supplies
 # TARGETARCH for the requested target platform; use it rather than uname so a
 # cross-build cannot accidentally inspect the builder's architecture.
@@ -34,7 +34,7 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends clang-22 llvm-22 python3 python3-pip zlib1g-dev; \
     case "$TARGETARCH" in \
-        amd64) target="linux-x86_64"; archive_sha="a8cc06345e4ebe1b5f31852a807222652269bf384f372393930916923cfdcff8" ;; \
+        amd64) target="linux-x86_64"; archive_sha="bdfaa138f274bd5c144987945d705cddaea03f2a77ac2cae1870bff2d36e71fa" ;; \
         arm64) echo "unsupported architecture: $TARGETARCH (mux v${MUX_VERSION} has no published arm64 compiler asset)" >&2; exit 1 ;; \
         *) echo "unsupported architecture: ${TARGETARCH:-unknown}" >&2; exit 1 ;; \
     esac; \
