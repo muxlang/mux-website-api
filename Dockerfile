@@ -14,6 +14,8 @@ ARG MUX_VERSION=0.15.0
 # TARGETARCH for the requested target platform; use it rather than uname so a
 # cross-build cannot accidentally inspect the builder's architecture.
 ARG TARGETARCH=amd64
+# Patch the pinned base image's APT before using it for further package fetches.
+ARG APT_VERSION=2.8.4ubuntu0.1
 # Keep the isolation boundary packages explicit. These are amd64 versions from
 # Ubuntu Noble security; update them deliberately with the base-image refresh.
 ARG BUBBLEWRAP_VERSION=0.9.0-1ubuntu0.3
@@ -24,8 +26,9 @@ ARG UTIL_LINUX_VERSION=2.39.3-9ubuntu6.5
 # One layer: install the toolchain, then download/verify/install the released mux
 # binary. The published .sha256 references a "dist/" path, so verify by hash.
 RUN set -eux; \
-    apt-get update; \
+    apt-get update -o Acquire::Retries=0; \
     apt-get install -y --no-install-recommends \
+        "apt=${APT_VERSION}" \
         "bubblewrap=${BUBBLEWRAP_VERSION}" ca-certificates curl gnupg lsb-release \
         "util-linux=${UTIL_LINUX_VERSION}" wget; \
     wget --inet4-only --max-redirect=0 -O /usr/share/keyrings/llvm-snapshot.gpg.key https://apt.llvm.org/llvm-snapshot.gpg.key; \
