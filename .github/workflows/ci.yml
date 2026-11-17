@@ -111,6 +111,33 @@ jobs:
               printf "func main() returns void {\\n    return\\n}\\n" > /tmp/smoke.mux
               mux run /tmp/smoke.mux
             '
+      - name: Smoke-test Gunicorn HTTP startup
+        run: |
+          container_id="$(docker run --detach --publish 127.0.0.1::8080 \
+            --env MUX_ENV=production \
+            --env MUX_API_ORIGIN_TOKEN=ci-smoke-test-token \
+            mux-website-api:ci)"
+          cleanup() {
+            docker rm --force "$container_id" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          port_mapping="$(docker port "$container_id" 8080/tcp)"
+          host_port="${port_mapping##*:}"
+          deadline=$((SECONDS + 30))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            if curl --fail --silent "http://127.0.0.1:${host_port}/health"; then
+              echo
+              exit 0
+            fi
+            if [ "$(docker inspect --format '{{.State.Running}}' "$container_id")" != true ]; then
+              docker logs "$container_id"
+              exit 1
+            fi
+            sleep 1
+          done
+          docker logs "$container_id"
+          echo "Gunicorn did not serve /health within 30 seconds" >&2
+          exit 1
       - name: Scan production image
         run: >-
           docker save --output /tmp/mux-website-api-ci.tar mux-website-api:ci &&
